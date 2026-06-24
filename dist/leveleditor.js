@@ -605,7 +605,9 @@ export class LevelManager {
                 removeEntities();
                 removeTiles();
                 removeTrack();
-                L.fixedTiles.push({ x, y, type: 'tunnel', edges: [h], pairId: this.nextPairId() });
+                // Default the mouth to face adjacent connecting rail, so the machine's
+                // embedded rail lines up with the track instead of sitting across it.
+                L.fixedTiles.push({ x, y, type: 'tunnel', edges: [this.tunnelMouthFor(x, y, h)], pairId: this.nextPairId() });
                 break;
             case 'gate':
                 removeEntities();
@@ -1006,6 +1008,31 @@ export class LevelManager {
         for (let id = 1;; id++)
             if ((counts.get(id) ?? 0) < 2)
                 return id;
+    }
+    /** A cell carries (or connects via) rail — used to align a placed tunnel. */
+    hasRailAt(x, y) {
+        const L = this.level;
+        if (!L || x < 0 || y < 0 || x >= L.grid.cols || y >= L.grid.rows)
+            return false;
+        if ((this.trackMask.get(`${x},${y}`) ?? 0) !== 0)
+            return true;
+        if (L.locomotive.x === x && L.locomotive.y === y)
+            return true; // start stub
+        const t = L.fixedTiles.find((t) => t.x === x && t.y === y);
+        return !!t && t.type !== 'rock'; // any rail-bearing tile (track/gate/button/signal/switch/tunnel/exit)
+    }
+    /** Pick a tunnel mouth that faces an adjacent rail so the machine lines up with
+     *  the track; falls back to the chosen facing when nothing adjoins it yet. */
+    tunnelMouthFor(x, y, fallback) {
+        if (this.hasRailAt(x - 1, y))
+            return 'W';
+        if (this.hasRailAt(x + 1, y))
+            return 'E';
+        if (this.hasRailAt(x, y - 1))
+            return 'N';
+        if (this.hasRailAt(x, y + 1))
+            return 'S';
+        return fallback;
     }
     /* ----------------------------- render / validate ----------------------------- */
     afterEdit() {
