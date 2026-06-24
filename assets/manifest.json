@@ -1,6 +1,6 @@
 {
   "sprites": {
-    "loco":  { "src": "baked/loco_a.png" },
+    "loco":  { "src": "baked/loco_c.png" },
     "wagon": { "src": "baked/wagon_container.png" },
     "mover": { "src": "baked/mover_tram.png" },
     "coupler": { "src": "baked/coupler.png" },
