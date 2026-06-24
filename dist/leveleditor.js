@@ -56,6 +56,7 @@ export class LevelManager {
         this.dragHover = null;
         this.activeId = null; // the one pointer that owns the current gesture
         this.outside = false; // pointer left the board mid-paint (don't bridge track across the gap)
+        this.hoverCell = null; // Erase tool: cell under the cursor
         /* ----------------------------- painting ----------------------------- */
         this.onDown = (e) => {
             if (this.dragging || this.painting)
@@ -74,6 +75,7 @@ export class LevelManager {
                 this.draw();
                 return;
             }
+            this.hoverCell = null; // a gesture is starting; drop the hover highlight
             this.painting = true;
             this.last = cell;
             if (this.tool !== 'track')
@@ -93,6 +95,18 @@ export class LevelManager {
                 e.preventDefault();
                 this.dragHover = cell;
                 this.draw(); // shows the green/red drop tint live
+                return;
+            }
+            if (this.tool === 'erase' && !this.painting && this.level) {
+                // Hover (desktop): highlight the cell and name the piece the next click removes.
+                const cell = this.renderer.cellAt(e.clientX, e.clientY);
+                const same = (!cell && !this.hoverCell) || (!!cell && !!this.hoverCell && cell.x === this.hoverCell.x && cell.y === this.hoverCell.y);
+                if (same)
+                    return;
+                this.hoverCell = cell;
+                const tn = cell ? this.eraseTargetName(cell.x, cell.y) : null;
+                this.status(tn ? `Erase → ${tn}` : '');
+                this.draw();
                 return;
             }
             if (!this.painting || !this.level)
@@ -376,6 +390,8 @@ export class LevelManager {
                 this.tool = t.tool;
                 if (this.tool !== 'select')
                     this.clearSelection();
+                this.hoverCell = null;
+                this.status('');
                 for (const c of this.toolsEl.children)
                     c.classList.toggle('sel', c.dataset.tool === this.tool);
                 this.updateSelBar();
@@ -512,9 +528,7 @@ export class LevelManager {
         };
         switch (this.tool) {
             case 'erase':
-                removeEntities();
-                removeTiles();
-                removeTrack();
+                this.eraseAt(x, y); // smart, layered: one piece at a time, keeping the rail
                 break;
             case 'start':
                 removeEntities();
@@ -569,6 +583,62 @@ export class LevelManager {
                 break;
         }
         this.afterEdit();
+    }
+    /* ----------------------------- erase (smart / layered) ----------------------------- */
+    /** The through-track mask a rail-bearing obstacle carries (button/gate/signal/
+     *  switch). Other tiles (rock/tunnel/exit) carry no through-rail to preserve. */
+    railMaskOf(t) {
+        if (t.type !== 'button' && t.type !== 'gate' && t.type !== 'signal' && t.type !== 'switch')
+            return 0;
+        return (typeof t.mask === 'number' ? t.mask : 0) | (t.edges ?? []).reduce((m, e) => addEdge(m, e), 0);
+    }
+    /** Removing a rail-bearing obstacle leaves its rail behind as a real track tile,
+     *  so the track and the obstacle are independently deletable (no entanglement). */
+    preserveRail(t) {
+        const m = this.railMaskOf(t);
+        if (m !== 0)
+            this.trackMask.set(`${t.x},${t.y}`, (this.trackMask.get(`${t.x},${t.y}`) ?? 0) | m);
+    }
+    /** What the next erase click on this cell would remove (top-most first), or null. */
+    eraseTargetName(x, y) {
+        const L = this.level;
+        if (!L)
+            return null;
+        if ((L.wagons ?? []).some((w) => w.x === x && w.y === y))
+            return 'wagon';
+        if ((L.movers ?? []).some((m) => m.x === x && m.y === y))
+            return 'mover';
+        const tile = L.fixedTiles.find((t) => t.type !== 'track' && t.x === x && t.y === y);
+        if (tile)
+            return tile.type;
+        if ((this.trackMask.get(`${x},${y}`) ?? 0) !== 0)
+            return 'track';
+        return null;
+    }
+    /** Erase the single top-most piece in a cell: an entity, else an obstacle (its
+     *  rail stays as track), else the track. So an obstacle sitting on a rail peels
+     *  off in two clicks instead of nuking the cell. */
+    eraseAt(x, y) {
+        const L = this.level;
+        if (!L)
+            return;
+        if ((L.wagons ?? []).some((w) => w.x === x && w.y === y) || (L.movers ?? []).some((m) => m.x === x && m.y === y)) {
+            L.wagons = (L.wagons ?? []).filter((w) => !(w.x === x && w.y === y));
+            L.movers = (L.movers ?? []).filter((m) => !(m.x === x && m.y === y));
+            L.wagons.forEach((w, i) => (w.number = i + 1));
+            return;
+        }
+        const tile = L.fixedTiles.find((t) => t.type !== 'track' && t.x === x && t.y === y);
+        if (tile) {
+            this.preserveRail(tile);
+            L.fixedTiles = L.fixedTiles.filter((t) => t !== tile);
+            this.rebuildTrackTiles();
+            return;
+        }
+        if ((this.trackMask.get(`${x},${y}`) ?? 0) !== 0) {
+            this.trackMask.delete(`${x},${y}`);
+            this.rebuildTrackTiles();
+        }
     }
     /* ----------------------------- selection (Select tool) ----------------------------- */
     /** What's at a cell, top-most first: loco > wagon > mover > obstacle tile.
@@ -709,7 +779,9 @@ export class LevelManager {
             L.movers = (L.movers ?? []).filter((m) => m !== s.ref);
         }
         else {
+            this.preserveRail(s.ref); // keep the rail under a deleted obstacle
             L.fixedTiles = L.fixedTiles.filter((t) => t !== s.ref);
+            this.rebuildTrackTiles();
         }
         this.selection = null;
         this.afterEdit();
@@ -734,12 +806,22 @@ export class LevelManager {
     /** Selection ring + (during a drag) the green/red drop-target tint. Drawn on
      *  the editor canvas after the renderer, so render.ts stays untouched. */
     drawOverlays() {
-        if (this.tool !== 'select')
-            return;
         const ctx = this.canvas.getContext('2d');
         if (!ctx)
             return;
         const { ox, oy, cell } = this.renderer.layout;
+        // Erase tool: ring the hovered cell (what the next click removes).
+        if (this.tool === 'erase' && this.hoverCell) {
+            const lw = Math.max(2, cell * 0.06);
+            ctx.save();
+            ctx.strokeStyle = '#e0653f';
+            ctx.lineWidth = lw;
+            ctx.setLineDash([cell * 0.16, cell * 0.12]);
+            ctx.strokeRect(ox + this.hoverCell.x * cell + lw, oy + this.hoverCell.y * cell + lw, cell - 2 * lw, cell - 2 * lw);
+            ctx.restore();
+        }
+        if (this.tool !== 'select')
+            return;
         if (this.dragHover) {
             const cur = this.selectedPos();
             if (cur && (this.dragHover.x !== cur.x || this.dragHover.y !== cur.y)) {
