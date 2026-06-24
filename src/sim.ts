@@ -85,9 +85,12 @@ export class Simulation {
   private junctionActive = new Map<number, number>();
   private gateOpen = new Map<string, boolean>();
   private signalOpen = new Map<number, boolean>();
+  /** Frozen objects (Hold booster): keys 'sig:<idx>', 'gate:<color>', 'mover:<i>'. */
+  private readonly held: ReadonlySet<string>;
 
-  constructor(grid: Grid, level: Level) {
+  constructor(grid: Grid, level: Level, held: ReadonlySet<string> = new Set()) {
     this.grid = grid;
+    this.held = held;
     const L = level.locomotive;
     this.loco = { x: L.x, y: L.y, px: L.x, py: L.y, heading: L.heading };
     this.trail = [{ x: L.x, y: L.y }];
@@ -175,7 +178,8 @@ export class Simulation {
 
   private applyEnterEffects(cell: Cell): void {
     if (cell.type === 'button' && cell.color) {
-      this.gateOpen.set(cell.color, !(this.gateOpen.get(cell.color) ?? false));
+      // A held gate colour ignores its button (frozen open/closed).
+      if (!this.held.has('gate:' + cell.color)) this.gateOpen.set(cell.color, !(this.gateOpen.get(cell.color) ?? false));
       this.events.push('button');
     } else if (cell.type === 'switch' && cell.color) {
       for (const c of this.grid.cells) {
@@ -213,8 +217,8 @@ export class Simulation {
     if (locoIntent.kind === 'derail') return this.fail('derailed');
     const locoMoves = locoIntent.kind === 'move';
 
-    const moverIntents: Intent[] = this.movers.map((m) =>
-      m.alive ? this.intentFor(m.x, m.y, m.heading) : { kind: 'wait' },
+    const moverIntents: Intent[] = this.movers.map((m, j) =>
+      m.alive && !this.held.has('mover:' + j) ? this.intentFor(m.x, m.y, m.heading) : { kind: 'wait' },
     );
 
     /* --- coupling decision (only when the loco actually moves) --- */
@@ -316,8 +320,8 @@ export class Simulation {
     for (const c of enteredCells) this.applyEnterEffects(c);
     for (const idx of flips) this.junctionActive.set(idx, ((this.junctionActive.get(idx) ?? 0) + 1) % 2);
 
-    // Signals advance their phase every tick.
-    for (const [idx, open] of this.signalOpen) this.signalOpen.set(idx, !open);
+    // Signals advance their phase every tick (unless held/frozen).
+    for (const [idx, open] of this.signalOpen) if (!this.held.has('sig:' + idx)) this.signalOpen.set(idx, !open);
 
     this.ticks++;
 

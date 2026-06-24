@@ -156,14 +156,16 @@ async function boot() {
         showSelect(true); // rebuilds the select (and re-syncs game levels) from the store
     });
     /* ----------------------------- booster bar (below the board) ----------------------------- */
-    // Scaffold UI placed right under the gameplay grid, built from the tinted
-    // icons. No effect wired yet — each click just toasts; hook real behaviour
-    // (reverse loco, drop a track, hold a signal…) where marked.
+    // Functional power-ups under the grid (each has a limited count):
+    //   Reverse — undo all the way back to the level start
+    //   +Track  — grant one extra track piece of budget
+    //   Hold    — freeze one object (signal / gate / mover) for the run
+    //   Boost   — run Play at 2×
     const boosters = [
-        { icon: 'icon_loco', color: '#3f7fd2', name: 'Reverse', count: 2 },
-        { icon: 'icon_rail', color: '#4fae5a', name: '+Track', count: 3 },
-        { icon: 'icon_signal_stop', color: '#d2553f', name: 'Hold', count: 1 },
-        { icon: 'icon_signal_go', color: '#d9a82e', name: 'Boost', count: 2 },
+        { id: 'reverse', icon: 'icon_loco', color: '#3f7fd2', name: 'Reverse', count: 2 },
+        { id: 'track', icon: 'icon_rail', color: '#4fae5a', name: '+Track', count: 3 },
+        { id: 'hold', icon: 'icon_signal_stop', color: '#d2553f', name: 'Hold', count: 2 },
+        { id: 'boost', icon: 'icon_signal_go', color: '#d9a82e', name: 'Boost', count: 2 },
     ];
     const boostersEl = el('boosters');
     const idpr = Math.min(2, window.devicePixelRatio || 1);
@@ -192,14 +194,35 @@ async function boot() {
         label.textContent = b.name;
         btn.append(count, cvs, label);
         let n = b.count;
-        btn.addEventListener('click', () => {
-            if (n <= 0)
-                return;
+        const spend = () => {
             n--;
             count.textContent = '×' + n;
             if (n === 0)
                 btn.disabled = true;
-            game.toast(`${b.name} — hook an effect here`); // TODO: wire booster behaviour
+        };
+        btn.addEventListener('click', () => {
+            if (n <= 0)
+                return;
+            switch (b.id) {
+                case 'reverse':
+                    game.revertToStart();
+                    spend();
+                    break;
+                case 'track':
+                    game.grantTrack(1);
+                    spend();
+                    break;
+                case 'boost':
+                    game.boost();
+                    spend();
+                    break;
+                case 'hold':
+                    game.beginHold((applied) => {
+                        if (applied)
+                            spend();
+                    });
+                    break;
+            }
         });
         boostersEl.appendChild(btn);
     }

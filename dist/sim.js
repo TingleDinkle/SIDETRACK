@@ -27,7 +27,7 @@
 import { DELTA, OPPOSITE, edgeList, hasEdge } from './types.js';
 import { classify, exitEdge } from './track.js';
 export class Simulation {
-    constructor(grid, level) {
+    constructor(grid, level, held = new Set()) {
         /** Coupled wagons, chain order: index 0 directly behind the loco. */
         this.coupled = [];
         this.free = [];
@@ -43,6 +43,7 @@ export class Simulation {
         this.gateOpen = new Map();
         this.signalOpen = new Map();
         this.grid = grid;
+        this.held = held;
         const L = level.locomotive;
         this.loco = { x: L.x, y: L.y, px: L.x, py: L.y, heading: L.heading };
         this.trail = [{ x: L.x, y: L.y }];
@@ -135,7 +136,9 @@ export class Simulation {
     }
     applyEnterEffects(cell) {
         if (cell.type === 'button' && cell.color) {
-            this.gateOpen.set(cell.color, !(this.gateOpen.get(cell.color) ?? false));
+            // A held gate colour ignores its button (frozen open/closed).
+            if (!this.held.has('gate:' + cell.color))
+                this.gateOpen.set(cell.color, !(this.gateOpen.get(cell.color) ?? false));
             this.events.push('button');
         }
         else if (cell.type === 'switch' && cell.color) {
@@ -171,7 +174,7 @@ export class Simulation {
         if (locoIntent.kind === 'derail')
             return this.fail('derailed');
         const locoMoves = locoIntent.kind === 'move';
-        const moverIntents = this.movers.map((m) => m.alive ? this.intentFor(m.x, m.y, m.heading) : { kind: 'wait' });
+        const moverIntents = this.movers.map((m, j) => m.alive && !this.held.has('mover:' + j) ? this.intentFor(m.x, m.y, m.heading) : { kind: 'wait' });
         /* --- coupling decision (only when the loco actually moves) --- */
         let coupling = null;
         if (locoMoves) {
@@ -282,9 +285,10 @@ export class Simulation {
             this.applyEnterEffects(c);
         for (const idx of flips)
             this.junctionActive.set(idx, ((this.junctionActive.get(idx) ?? 0) + 1) % 2);
-        // Signals advance their phase every tick.
+        // Signals advance their phase every tick (unless held/frozen).
         for (const [idx, open] of this.signalOpen)
-            this.signalOpen.set(idx, !open);
+            if (!this.held.has('sig:' + idx))
+                this.signalOpen.set(idx, !open);
         this.ticks++;
         /* --- STEP 6: win / lose --- */
         const here = this.grid.get(this.loco.x, this.loco.y);

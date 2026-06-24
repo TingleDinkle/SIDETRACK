@@ -224,6 +224,51 @@ export class Renderer {
     ctx.fillRect(0, 0, cssW, cssH);
   }
 
+  /** Hold targeting: blue-dim the board and ring the choosable objects. */
+  drawHoldOverlay(cells: { x: number; y: number }[]): void {
+    const ctx = this.ctx;
+    const { cssW, cssH, ox, oy, cell } = this.layout;
+    ctx.save();
+    ctx.fillStyle = 'rgba(28,48,86,0.5)';
+    ctx.fillRect(0, 0, cssW, cssH);
+    for (const c of cells) {
+      const cx = ox + (c.x + 0.5) * cell;
+      const cy = oy + (c.y + 0.5) * cell;
+      ctx.beginPath();
+      ctx.arc(cx, cy, cell * 0.46, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.16)';
+      ctx.fill();
+      ctx.lineWidth = cell * 0.06;
+      ctx.strokeStyle = '#ffe27a';
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** A frozen (held) marker on each given cell. */
+  markFrozen(cells: { x: number; y: number }[]): void {
+    const ctx = this.ctx;
+    const { ox, oy, cell } = this.layout;
+    ctx.save();
+    for (const c of cells) {
+      const cx = ox + (c.x + 0.5) * cell;
+      const cy = oy + (c.y + 0.5) * cell;
+      ctx.beginPath();
+      ctx.arc(cx, cy, cell * 0.46, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(120,190,255,0.22)';
+      ctx.fill();
+      ctx.lineWidth = cell * 0.05;
+      ctx.strokeStyle = '#bfe4ff';
+      ctx.stroke();
+      ctx.fillStyle = '#eaf6ff';
+      ctx.font = `${Math.round(cell * 0.3)}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('❄', cx, cy - cell * 0.3);
+    }
+    ctx.restore();
+  }
+
   /* ----------------------------- particles ----------------------------- */
 
   /** Spawn a burst of sparks at a cell (e.g. on coupling / win). */

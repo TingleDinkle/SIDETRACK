@@ -304,6 +304,26 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
         s.tick(); // loco enters the switch -> flips blue junctions
         ok('sim: switch flips junction branch', before !== s.junctionBranch(idx));
     }
+    // M) Hold booster: a frozen closed signal never opens -> loco stuck -> lose
+    {
+        const mk = () => {
+            const g = new Grid(4, 1);
+            start(g, 0, 0, 'E');
+            special(g, 1, 0, 'signal', EW, { open: false }); // closed
+            track(g, 2, 0, EW);
+            exit(g, 3, 0, 'W');
+            return g;
+        };
+        const lv = lvl(4, 1, { x: 0, y: 0, heading: 'E' });
+        eq('hold: signal flips normally -> win', run(mk(), lv).status, 'won');
+        const g2 = mk();
+        const held = new Set(['sig:' + g2.idx(1, 0)]);
+        const s2 = new Simulation(g2, lv, held);
+        let n = 0;
+        while (s2.status === 'running' && n++ < 400)
+            s2.tick();
+        eq('hold: frozen closed signal -> lose', s2.status, 'lost');
+    }
 }
 /* ----------------- level validation (editor edge cases) ----------------- */
 {

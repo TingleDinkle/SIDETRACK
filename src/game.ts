@@ -57,6 +57,11 @@ export class Game {
   private readonly resizeObserver: ResizeObserver;
   private toastTimer = 0;
 
+  /** Hold booster: frozen object keys for the sim, plus targeting state. */
+  private readonly held = new Set<string>();
+  private holdTargeting = false;
+  private onHoldResult: ((applied: boolean) => void) | null = null;
+
   /** Called when a level is solved (for progress persistence / UI refresh). */
   onWin: ((levelId: string, ticks: number) => void) | null = null;
 
@@ -79,6 +84,8 @@ export class Game {
     this.levelIndex = startIndex;
     this.applyLevel(this.levels[startIndex]);
     this.input = new InputController(canvas, renderer, this.editor, () => this.onEdited());
+    // Capture-phase listener so Hold targeting intercepts taps before track-laying.
+    canvas.addEventListener('pointerdown', this.onHoldPointer, true);
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
@@ -97,6 +104,8 @@ export class Game {
     this.sim = null;
     this.state = 'editing';
     this.acc = 0;
+    this.held.clear();
+    this.cancelHoldTargeting();
     this.renderer.setTheme(typeof level.world === 'number' ? level.world : 1);
   }
 
@@ -151,6 +160,8 @@ export class Game {
     const animating = this.state === 'running' && this.sim && this.sim.status === 'running';
     const frac = animating ? Math.min(1, this.acc / this.tickInterval()) : 1;
     this.renderer.draw(this.grid, this.buildEntities(frac), this.dynState(), now);
+    if (this.held.size) this.renderer.markFrozen(this.frozenCells());
+    if (this.holdTargeting) this.renderer.drawHoldOverlay(this.holdableCells());
     requestAnimationFrame(this.loop);
   };
 
@@ -231,7 +242,7 @@ export class Game {
   }
 
   private startSim(): void {
-    this.sim = new Simulation(this.grid, this.level);
+    this.sim = new Simulation(this.grid, this.level, this.held);
     this.input.setEnabled(false);
     this.acc = 0;
     this.hideOutcome();
@@ -375,6 +386,119 @@ export class Game {
     this.speed = this.speed === 1 ? 2 : 1;
     this.updateControls();
   }
+
+  /* ----------------------------- boosters ----------------------------- */
+
+  /** Reverse: undo all the way back to the level's starting state. */
+  revertToStart(): void {
+    this.sim = null;
+    this.state = 'editing';
+    this.input.setEnabled(true);
+    this.acc = 0;
+    this.held.clear();
+    this.cancelHoldTargeting();
+    this.editor.clearAll();
+    this.hideOutcome();
+    this.updateControls();
+    this.toast('Reverted to start');
+  }
+
+  /** +Track: grant extra track budget for this attempt. */
+  grantTrack(n = 1): void {
+    this.editor.budget += n;
+    this.updateHud();
+    this.toast(`+${n} track piece`);
+  }
+
+  /** Boost: run Play at 2×. */
+  boost(): void {
+    this.speed = 2;
+    this.updateControls();
+    this.toast('Boost · 2× speed');
+  }
+
+  /** Hold: enter targeting to freeze one object (signal / gate / mover). The
+   *  callback reports whether a freeze was actually applied (to spend the use). */
+  beginHold(onResult: (applied: boolean) => void): void {
+    if (this.holdTargeting) {
+      onResult(false);
+      return;
+    }
+    if (!this.holdableCells().length) {
+      this.toast('Nothing to hold on this level');
+      onResult(false);
+      return;
+    }
+    this.holdTargeting = true;
+    this.onHoldResult = onResult;
+    this.input.setEnabled(false);
+    this.toast('Tap an object to freeze it (tap empty to cancel)');
+  }
+
+  private cancelHoldTargeting(): void {
+    if (!this.holdTargeting) return;
+    this.holdTargeting = false;
+    const cb = this.onHoldResult;
+    this.onHoldResult = null;
+    if (this.state === 'editing') this.input.setEnabled(true);
+    cb?.(false);
+  }
+
+  /** Cells of objects that can be frozen: movers, signals, gates. */
+  private holdableCells(): { x: number; y: number; key: string }[] {
+    const out: { x: number; y: number; key: string }[] = [];
+    const movers = this.sim ? this.sim.movers.map((m, i) => ({ x: m.x, y: m.y, i })) : (this.level.movers ?? []).map((m, i) => ({ x: m.x, y: m.y, i }));
+    for (const m of movers) out.push({ x: m.x, y: m.y, key: 'mover:' + m.i });
+    for (const c of this.grid.cells) {
+      if (c.type === 'signal') out.push({ x: c.x, y: c.y, key: 'sig:' + this.grid.idx(c.x, c.y) });
+      else if (c.type === 'gate' && c.color) out.push({ x: c.x, y: c.y, key: 'gate:' + c.color });
+    }
+    return out;
+  }
+
+  /** Current cells of frozen objects (for the ❄ markers). */
+  private frozenCells(): { x: number; y: number }[] {
+    const out: { x: number; y: number }[] = [];
+    for (const key of this.held) {
+      if (key.startsWith('mover:')) {
+        const i = Number(key.slice(6));
+        const m = this.sim ? this.sim.movers[i] : (this.level.movers ?? [])[i];
+        if (m) out.push({ x: m.x, y: m.y });
+      } else if (key.startsWith('sig:')) {
+        const idx = Number(key.slice(4));
+        const c = this.grid.cells[idx];
+        if (c) out.push({ x: c.x, y: c.y });
+      } else if (key.startsWith('gate:')) {
+        const color = key.slice(5);
+        for (const c of this.grid.cells) if (c.type === 'gate' && c.color === color) out.push({ x: c.x, y: c.y });
+      }
+    }
+    return out;
+  }
+
+  private onHoldPointer = (e: PointerEvent): void => {
+    if (!this.holdTargeting) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const cell = this.renderer.cellAt(e.clientX, e.clientY);
+    const cb = this.onHoldResult;
+    this.holdTargeting = false;
+    this.onHoldResult = null;
+    if (this.state === 'editing') this.input.setEnabled(true);
+    const hit = cell ? this.holdableCells().find((h) => h.x === cell.x && h.y === cell.y) : undefined;
+    if (hit && !this.held.has(hit.key)) {
+      this.held.add(hit.key);
+      this.toast('Frozen ❄');
+      cb?.(true); // applied → spend the use
+    } else if (hit) {
+      this.held.delete(hit.key); // tapping a frozen object un-freezes it (refunds)
+      this.toast('Un-frozen');
+      cb?.(false);
+    } else {
+      this.toast('Cancelled');
+      cb?.(false);
+    }
+  };
 
   replay(): void {
     this.startSim();
