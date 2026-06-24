@@ -713,7 +713,7 @@ export class Renderer {
       case 'rock': this.drawRock(c.x, c.y); break;
       case 'exit': this.drawExit(c.x, c.y); break;
       case 'start': this.drawStartPad(c.x, c.y); break;
-      case 'tunnel': this.drawTunnel(c.x, c.y); break;
+      case 'tunnel': this.drawTunnel(c); break;
       case 'button': this.drawButton(c); break;
       case 'switch': this.drawSwitch(c); break;
       case 'gate': {
@@ -738,10 +738,8 @@ export class Renderer {
       case 'start': return { name: 'tile_start', rot: 0, shadow: false };
       // buttons are drawn by drawButton (colour-tinted small vs neutral master)
       case 'switch': return { name: 'tile_switch', rot: 0, shadow: false };
-      case 'tunnel': {
-        const mouth = edgeList(c.mask)[0] ?? 'E';
-        return { name: 'tile_tunnel', rot: this.headingAngle(mouth), shadow: true };
-      }
+      case 'tunnel':
+        return null; // drawTunnel mirrors/rotates the machine so its mouth faces the track
       case 'gate':
         return null; // drawGate renders the link-colour-recoloured barrier sprite
       case 'signal': {
@@ -982,9 +980,33 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawTunnel(x: number, y: number): void {
+  /**
+   * A tunnel = the machine model. Baked with its opening facing West, so the
+   * mouth is turned to the cell's open edge: mirrored for an East mouth (keeps it
+   * upright) and quarter-turned for N/S. The train then visibly enters/leaves
+   * through the opening.
+   */
+  private drawTunnel(c: Cell): void {
     const ctx = this.ctx;
-    const { left, top, size } = this.cellRect(x, y);
+    const { left, top, size } = this.cellRect(c.x, c.y);
+    const cx = left + size / 2;
+    const cy = top + size / 2;
+    if (this.assets && this.assets.has('tile_tunnel')) {
+      const mouth = edgeList(c.mask)[0] ?? 'W';
+      this.contactShadow(cx, cy, size);
+      ctx.save();
+      ctx.translate(cx, cy);
+      switch (mouth) {
+        case 'W': break; // baked orientation
+        case 'E': ctx.scale(-1, 1); break; // mirror, stays upright
+        case 'S': ctx.rotate(Math.PI / 2); break;
+        case 'N': ctx.rotate(-Math.PI / 2); break;
+      }
+      this.assets.draw(ctx, 'tile_tunnel', 0, 0, size * 0.98, size * 0.98);
+      ctx.restore();
+      return;
+    }
+    // Procedural fallback: a rounded portal with a dark mouth.
     ctx.save();
     ctx.fillStyle = PAL.rock;
     this.roundRect(left + size * 0.12, top + size * 0.12, size * 0.76, size * 0.76, size * 0.3);
@@ -1008,7 +1030,6 @@ export class Renderer {
     const { left, top, size } = this.cellRect(x, y);
     const cx = left + size / 2;
     const cy = top + size / 2;
-    this.contactShadow(cx, cy, size);
     if (this.assets?.has('loco')) {
       this.assets.draw(ctx, 'loco', cx, cy, size * 0.92, size * 0.92, this.headingAngle(h));
       return;
@@ -1048,7 +1069,6 @@ export class Renderer {
     const cx = left + size / 2;
     const cy = top + size / 2;
     const w = size * 0.66;
-    this.contactShadow(cx, cy, size);
     // A single wagon sprite serves every number — the digit is drawn on top.
     if (this.assets?.has('wagon')) {
       this.assets.draw(ctx, 'wagon', cx, cy, size * 0.86, size * 0.86, 0);
@@ -1081,7 +1101,6 @@ export class Renderer {
     const { left, top, size } = this.cellRect(x, y);
     const cx = left + size / 2;
     const cy = top + size / 2;
-    this.contactShadow(cx, cy, size);
     if (this.assets?.has('mover')) {
       this.assets.draw(ctx, 'mover', cx, cy, size * 0.78, size * 0.78, this.headingAngle(h));
       return;
