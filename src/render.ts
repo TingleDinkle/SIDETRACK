@@ -71,7 +71,8 @@ const PAL = {
   boardDark: '#d3bd93',
   grid: 'rgba(80,60,30,0.10)',
   boardEdge: 'rgba(80,60,30,0.18)',
-  tie: '#b98c54',
+  ballast: '#caa06a',
+  tie: '#dd9a4e',
   tieShadow: 'rgba(60,40,15,0.25)',
   railCore: '#eef0f2',
   railEdge: '#8d9298',
@@ -509,6 +510,14 @@ export class Renderer {
     const px = -dy / len;
     const py = dx / len;
     const g = size * 0.12;
+    // ballast bed (warm gravel), then sleepers, then rails
+    ctx.strokeStyle = PAL.ballast;
+    ctx.lineWidth = size * 0.44;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
     this.sleepersLine(x0, y0, x1, y1, size);
     // rail outline then core, both offset to either side
     for (const pass of [
@@ -530,6 +539,13 @@ export class Renderer {
   private railArc(cx: number, cy: number, r: number, a0: number, a1: number, acw: boolean, size: number): void {
     const ctx = this.ctx;
     const g = size * 0.12;
+    // ballast bed under the arc
+    ctx.strokeStyle = PAL.ballast;
+    ctx.lineWidth = size * 0.44;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, a0, a1, acw);
+    ctx.stroke();
     this.sleepersArc(cx, cy, r, a0, a1, acw, size);
     for (const pass of [
       { col: PAL.railEdge, w: size * 0.085 },
