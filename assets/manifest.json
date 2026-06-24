@@ -7,6 +7,9 @@
 
     "tile_rock": { "src": "baked/rocks.png" },
 
+    "floor":        { "src": "baked/floor.png" },
+    "floor_detail": { "src": "baked/floor_detail.png" },
+
     "icon_loco":        { "src": "icons/steam-locomotive.png" },
     "icon_wagon":       { "src": "icons/mine-wagon.png" },
     "icon_rail":        { "src": "icons/rail-road.png" },

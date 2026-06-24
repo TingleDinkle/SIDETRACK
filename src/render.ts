@@ -71,6 +71,7 @@ const PAL = {
   boardDark: '#d3bd93',
   grid: 'rgba(80,60,30,0.10)',
   boardEdge: 'rgba(80,60,30,0.18)',
+  floorSeam: 'rgba(38,30,58,0.16)', // faint cell separators over the baked mine floor
   tie: '#f3a373', // orange-peach sleepers, matching the baked Kenney straight
   tieShadow: 'rgba(60,40,15,0.25)',
   railCore: '#e2e7f8', // light periwinkle rails
@@ -388,11 +389,68 @@ export class Renderer {
     ctx.restore();
   }
 
+  /** Stable per-cell hash (deterministic, no Math.random) used to scatter the
+   *  occasional floor-detail tile and vary its rotation. */
+  private cellHash(x: number, y: number): number {
+    let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+    return (h ^ (h >>> 16)) >>> 0;
+  }
+
+  /** Baked floor: lay the plain `floor` tile everywhere, then sprinkle the
+   *  `floor_detail` variant on ~1-in-8 cells (rotated for variety) so the board
+   *  reads like a worn mine floor rather than a flat fill. */
+  private drawFloor(grid: Grid): void {
+    const ctx = this.ctx;
+    const a = this.assets!;
+    const { ox, oy, cell, cols, rows } = this.layout;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const cx = ox + (x + 0.5) * cell;
+        const cy = oy + (y + 0.5) * cell;
+        a.draw(ctx, 'floor', cx, cy, cell + 1, cell + 1); // +1 kills hairline seams
+      }
+    }
+    if (a.has('floor_detail')) {
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const hsh = this.cellHash(x, y);
+          if (hsh % 100 >= 12) continue; // ~12% of cells, "less frequently"
+          const cx = ox + (x + 0.5) * cell;
+          const cy = oy + (y + 0.5) * cell;
+          a.draw(ctx, 'floor_detail', cx, cy, cell + 1, cell + 1, (hsh % 4) * (Math.PI / 2));
+        }
+      }
+    }
+    // Faint cell separators (legibility for track placement) + outer edge.
+    ctx.strokeStyle = PAL.floorSeam;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x <= cols; x++) {
+      ctx.moveTo(ox + x * cell + 0.5, oy);
+      ctx.lineTo(ox + x * cell + 0.5, oy + rows * cell);
+    }
+    for (let y = 0; y <= rows; y++) {
+      ctx.moveTo(ox, oy + y * cell + 0.5);
+      ctx.lineTo(ox + cols * cell, oy + y * cell + 0.5);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = PAL.boardEdge;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(ox, oy, cols * cell, rows * cell);
+  }
+
   private drawBoard(grid: Grid): void {
     const ctx = this.ctx;
     const { ox, oy, cell, cols, rows } = this.layout;
     const boardW = cols * cell;
     const boardH = rows * cell;
+
+    // Baked mine floor takes precedence when its sprite is present.
+    if (this.assets && this.assets.has('floor')) {
+      this.drawFloor(grid);
+      return;
+    }
 
     const ground = this.groundSprite();
     const pat = ground && this.assets ? this.assets.pattern(ctx, ground) : null;
