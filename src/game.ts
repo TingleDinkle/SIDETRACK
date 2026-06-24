@@ -187,16 +187,34 @@ export class Game {
     if (this.sim) {
       const s = this.sim;
       for (const w of s.free) out.push({ kind: 'wagon', x: w.x, y: w.y, heading: 'N', number: w.number });
+      const lp = pos(s.loco.px, s.loco.py, s.loco.x, s.loco.y);
+      const chain: { x: number; y: number }[] = [lp]; // front-to-back train positions
       for (const w of s.coupled) {
         const p = pos(w.px, w.py, w.x, w.y);
+        chain.push(p);
         out.push({ kind: 'wagon', x: p.x, y: p.y, heading: 'N', number: w.number });
       }
       for (const m of s.movers) {
         const p = pos(m.px, m.py, m.x, m.y);
         out.push({ kind: 'mover', x: p.x, y: p.y, heading: m.heading });
       }
-      const lp = pos(s.loco.px, s.loco.py, s.loco.x, s.loco.y);
       out.push({ kind: 'loco', x: lp.x, y: lp.y, heading: s.loco.heading });
+      // A coupler between each adjacent pair of cars (skip teleport gaps).
+      for (let i = 0; i < chain.length - 1; i++) {
+        const a = chain[i];
+        const b = chain[i + 1];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const d = Math.abs(dx) + Math.abs(dy);
+        if (d > 0.2 && d < 1.4) {
+          out.push({
+            kind: 'coupler',
+            x: (a.x + b.x) / 2,
+            y: (a.y + b.y) / 2,
+            heading: Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N',
+          });
+        }
+      }
     } else {
       const L = this.level;
       for (const w of L.wagons ?? []) out.push({ kind: 'wagon', x: w.x, y: w.y, heading: 'N', number: w.number });

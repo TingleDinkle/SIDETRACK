@@ -10,8 +10,12 @@
  * The renderer owns the screen↔grid mapping (`layout`) so input and rendering
  * always agree on where a cell is.
  */
-import { edgeList } from './types.js';
+import { EdgeBit, edgeList } from './types.js';
 import { classify } from './track.js';
+// Calibration offsets for the baked track/coupler sprites (radians). Tuned so
+// the corner piece connects the right edges and couplers lie along the train.
+const CURVE_BASE = 0;
+const COUPLER_BASE = Math.PI / 2;
 /** Named link colours for gates/buttons/switches/junctions. */
 const LINK_COLORS = {
     red: '#d2553f',
@@ -143,6 +147,9 @@ export class Renderer {
             this.drawTileMarker(c, grid, dyn);
         // Entities — drawn back-to-front so the loco sits on top of its wagons.
         for (const e of entities)
+            if (e.kind === 'coupler')
+                this.drawEntity(e);
+        for (const e of entities)
             if (e.kind === 'wagon' || e.kind === 'mover')
                 this.drawEntity(e);
         for (const e of entities)
@@ -236,7 +243,29 @@ export class Renderer {
             case 'decor':
                 this.drawDecor(e);
                 break;
+            case 'coupler':
+                this.drawCoupler(e);
+                break;
         }
+    }
+    /** Map a curve cell's two edges to a rotation for the baked corner sprite. */
+    curveRot(mask) {
+        if (mask & EdgeBit.E && mask & EdgeBit.S)
+            return CURVE_BASE; // base orientation
+        if (mask & EdgeBit.S && mask & EdgeBit.W)
+            return CURVE_BASE + Math.PI / 2;
+        if (mask & EdgeBit.W && mask & EdgeBit.N)
+            return CURVE_BASE + Math.PI;
+        return CURVE_BASE - Math.PI / 2; // N + E
+    }
+    /** The coupler bar between two adjacent cars. */
+    drawCoupler(e) {
+        if (!this.assets || !this.assets.has('coupler'))
+            return;
+        const { ox, oy, cell } = this.layout;
+        const cx = ox + (e.x + 0.5) * cell;
+        const cy = oy + (e.y + 0.5) * cell;
+        this.assets.draw(this.ctx, 'coupler', cx, cy, cell * 0.5, cell * 0.5, this.headingAngle(e.heading) + COUPLER_BASE);
     }
     /** Cosmetic scenery sprite, anchored near its base on the ground. */
     drawDecor(e) {
@@ -321,6 +350,19 @@ export class Renderer {
         const cy = top + size / 2;
         const edges = edgeList(c.mask);
         const shape = classify(c.mask);
+        // Baked 3D track sprites for the common shapes; junction/crossing/stub keep
+        // the procedural rails (the pack has no T / cross / switch piece).
+        if (this.assets) {
+            if (shape === 'straight' && this.assets.has('track_straight')) {
+                const vertical = (c.mask & EdgeBit.N) !== 0; // N|S
+                this.assets.draw(this.ctx, 'track_straight', cx, cy, size, size, vertical ? Math.PI / 2 : 0);
+                return;
+            }
+            if (shape === 'curve' && this.assets.has('track_curve')) {
+                this.assets.draw(this.ctx, 'track_curve', cx, cy, size, size, this.curveRot(c.mask));
+                return;
+            }
+        }
         switch (shape) {
             case 'stub': {
                 const m = this.edgeMid(left, top, size, edges[0]);

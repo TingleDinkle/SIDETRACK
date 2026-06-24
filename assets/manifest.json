@@ -4,6 +4,10 @@
     "wagon": { "src": "baked/wagon_container.png" },
     "mover": { "src": "baked/mover_tram.png" },
 
+    "track_straight": { "src": "baked/track_straight.png" },
+    "track_curve":    { "src": "baked/track_curve.png" },
+    "coupler":        { "src": "baked/coupler.png" },
+
     "icon_loco":        { "src": "icons/steam-locomotive.png" },
     "icon_wagon":       { "src": "icons/mine-wagon.png" },
     "icon_rail":        { "src": "icons/rail-road.png" },
