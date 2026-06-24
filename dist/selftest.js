@@ -11,6 +11,7 @@ import { classify, exitEdge } from './track.js';
 import { Grid } from './grid.js';
 import { Editor } from './editor.js';
 import { Simulation } from './sim.js';
+import { validateLevel } from './levelValidate.js';
 let passed = 0;
 let failed = 0;
 function ok(name, cond) {
@@ -303,6 +304,30 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
         s.tick(); // loco enters the switch -> flips blue junctions
         ok('sim: switch flips junction branch', before !== s.junctionBranch(idx));
     }
+}
+/* ----------------- level validation (editor edge cases) ----------------- */
+{
+    const good = {
+        id: 't',
+        world: 1,
+        name: 't',
+        grid: { cols: 5, rows: 3 },
+        trackBudget: 5,
+        locomotive: { x: 0, y: 1, heading: 'E' },
+        fixedTiles: [{ x: 4, y: 1, type: 'exit', heading: 'W' }],
+        wagons: [],
+        movers: [],
+        objectives: { couple: 'all-in-order', passengers: 0 },
+    };
+    const errs = (l) => validateLevel(l).filter((i) => i.level === 'error').length;
+    const with_ = (patch) => ({ ...good, ...patch });
+    ok('validate: clean level has no errors', errs(good) === 0);
+    ok('validate: no exit -> error', errs(with_({ fixedTiles: [] })) > 0);
+    ok('validate: loco off-grid -> error', errs(with_({ locomotive: { x: 99, y: 0, heading: 'E' } })) > 0);
+    ok('validate: wagon number gap -> error', errs(with_({ wagons: [{ x: 1, y: 1, number: 1 }, { x: 2, y: 1, number: 3 }] })) > 0);
+    ok('validate: wagon on loco -> error', errs(with_({ wagons: [{ x: 0, y: 1, number: 1 }] })) > 0);
+    ok('validate: colourless gate -> error', errs(with_({ fixedTiles: [{ x: 4, y: 1, type: 'exit', heading: 'W' }, { x: 2, y: 1, type: 'gate', edges: ['W', 'E'] }] })) > 0);
+    ok('validate: lone tunnel -> error', errs(with_({ fixedTiles: [{ x: 4, y: 1, type: 'exit', heading: 'W' }, { x: 2, y: 1, type: 'tunnel', edges: ['W'], pairId: 1 }] })) > 0);
 }
 /* ----------------------------- report ----------------------------- */
 console.log(`\nSidetrack self-tests: ${passed} passed, ${failed} failed`);

@@ -294,11 +294,14 @@ export class Simulation {
       this.coupled[i].x = trainNew[i + 1].x;
       this.coupled[i].y = trainNew[i + 1].y;
     }
-    if (locoMoves) enteredCells.push(this.grid.get(this.loco.x, this.loco.y)!);
+    // Collect entered cells, guarding against off-grid coords from a malformed level.
+    const pushCell = (x: number, y: number): void => {
+      const c = this.grid.get(x, y);
+      if (c) enteredCells.push(c);
+    };
+    if (locoMoves) pushCell(this.loco.x, this.loco.y);
     // Coupled wagons that moved trigger pass-over effects too (in chain order).
-    for (const w of this.coupled) {
-      if (w.x !== w.px || w.y !== w.py) enteredCells.push(this.grid.get(w.x, w.y)!);
-    }
+    for (const w of this.coupled) if (w.x !== w.px || w.y !== w.py) pushCell(w.x, w.y);
 
     for (let j = 0; j < this.movers.length; j++) {
       const p = moverNew[j];
@@ -306,7 +309,7 @@ export class Simulation {
       this.movers[j].y = p.y;
       this.movers[j].heading = p.heading;
       this.movers[j].alive = p.alive;
-      if (p.moved) enteredCells.push(this.grid.get(p.x, p.y)!);
+      if (p.moved) pushCell(p.x, p.y);
     }
 
     /* --- STEP 5: enter-effects (buttons/switches), then junction pass-flips --- */
@@ -319,8 +322,8 @@ export class Simulation {
     this.ticks++;
 
     /* --- STEP 6: win / lose --- */
-    const here = this.grid.get(this.loco.x, this.loco.y)!;
-    if (here.type === 'exit') {
+    const here = this.grid.get(this.loco.x, this.loco.y);
+    if (here && here.type === 'exit') {
       if (this.coupled.length === this.requiredCount) this.status = 'won';
       else this.fail('reached exit without all wagons');
     }

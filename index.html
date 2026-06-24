@@ -357,7 +357,7 @@
         margin-top: 4px;
         font-weight: 700;
       }
-      /* Level editor */
+      /* Level manager + editor */
       #editor {
         position: fixed;
         inset: 0;
@@ -367,7 +367,6 @@
         flex-direction: column;
         padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
         gap: 8px;
-        overflow-y: auto;
       }
       #editor.show {
         display: flex;
@@ -375,6 +374,7 @@
       #editor .ed-top,
       #editor .ed-tools,
       #editor .ed-opts,
+      #editor .ed-meta,
       #editor .ed-actions {
         display: flex;
         flex-wrap: wrap;
@@ -386,20 +386,19 @@
         color: var(--ink-soft);
         font-weight: 600;
       }
-      #editor input[type='number'] {
-        width: 58px;
-        font-size: 14px;
-        padding: 6px 8px;
-        min-height: 0;
-      }
+      #editor input,
       #editor select {
+        font-size: 13px;
         padding: 6px 8px;
         min-height: 0;
-        font-size: 13px;
+        border: 2px solid var(--panel-edge);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--ink);
       }
       #editor button {
         padding: 8px 12px;
-        min-height: 38px;
+        min-height: 36px;
         font-size: 14px;
         border-radius: 10px;
       }
@@ -407,7 +406,71 @@
         font-size: 13px;
         color: var(--accent-press);
         font-weight: 600;
-        margin-left: auto;
+      }
+      .ed-body {
+        flex: 1 1 auto;
+        display: flex;
+        gap: 10px;
+        min-height: 0;
+      }
+      .ed-sidebar {
+        flex: 0 0 220px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        overflow-y: auto;
+        padding-right: 4px;
+      }
+      #ed-list .ls-wh {
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--ink-soft);
+        margin: 8px 0 2px;
+      }
+      #ed-list .ls-row {
+        display: flex;
+        gap: 4px;
+        align-items: stretch;
+        margin-bottom: 4px;
+      }
+      #ed-list .ls-pick {
+        flex: 1;
+        text-align: left;
+        background: var(--panel);
+        border: 2px solid var(--panel-edge);
+        font-weight: 600;
+        font-size: 13px;
+        padding: 7px 9px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      #ed-list .ls-row.sel .ls-pick {
+        border-color: var(--accent);
+        background: #eef5ee;
+      }
+      #ed-list .ls-mini {
+        min-width: 34px;
+        padding: 6px;
+        background: var(--panel);
+        border: 2px solid var(--panel-edge);
+      }
+      .ed-main {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .ed-hint {
+        color: var(--ink-soft);
+        font-size: 14px;
+      }
+      .ed-editor {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-height: 0;
+        flex: 1;
       }
       .ed-tools button.sel {
         background: var(--accent);
@@ -416,21 +479,39 @@
       }
       .ed-stage {
         flex: 1 1 auto;
-        min-height: 240px;
+        min-height: 200px;
         background: var(--panel);
         border: 2px solid var(--panel-edge);
         border-radius: 12px;
         touch-action: none;
       }
-      #ed-board {
+      .ed-stage canvas {
         display: block;
         width: 100%;
         height: 100%;
         touch-action: none;
       }
+      .ed-valid {
+        max-height: 96px;
+        overflow-y: auto;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .ed-valid .ok {
+        color: var(--accent-press);
+        font-weight: 600;
+      }
+      .ed-valid .err {
+        color: var(--danger);
+        font-weight: 600;
+      }
+      .ed-valid .warn {
+        color: #b07a16;
+      }
       #ed-json {
+        flex: 0 0 auto;
         width: 100%;
-        height: 110px;
+        height: 84px;
         resize: vertical;
         font: 12px ui-monospace, Menlo, Consolas, monospace;
         border: 2px solid var(--panel-edge);
@@ -492,37 +573,27 @@
       <div id="ls-worlds"></div>
     </div>
 
-    <!-- Level editor (M6) -->
+    <!-- Level manager + editor -->
     <div id="editor">
       <div class="ed-top">
-        <button class="primary" id="ed-done">Done</button>
-        <strong>Level Editor</strong>
-        <label>cols <input id="ed-cols" type="number" min="2" max="16" /></label>
-        <label>rows <input id="ed-rows" type="number" min="2" max="12" /></label>
-        <label>budget <input id="ed-budget" type="number" min="0" /></label>
+        <button id="ed-done">Done</button>
+        <strong>Level Manager</strong>
+        <span class="spacer"></span>
+        <button id="ed-exportall">Export all</button>
+        <button id="ed-importall">Import</button>
+        <button id="ed-reset">Reset defaults</button>
         <span class="ed-status" id="ed-status"></span>
       </div>
-      <div class="ed-tools" id="ed-tools"></div>
-      <div class="ed-opts">
-        <label>facing
-          <select id="ed-heading"><option>E</option><option>S</option><option>W</option><option>N</option></select>
-        </label>
-        <label>track
-          <select id="ed-orient"><option value="H">↔ horizontal</option><option value="V">↕ vertical</option></select>
-        </label>
-        <label>color
-          <select id="ed-color"><option>red</option><option>blue</option><option>green</option><option>yellow</option></select>
-        </label>
+      <div class="ed-body">
+        <aside class="ed-sidebar">
+          <button class="primary" id="ed-new">+ New level</button>
+          <div id="ed-list"></div>
+        </aside>
+        <div class="ed-main" id="ed-main">
+          <p class="ed-hint">Pick a level on the left to edit, or create a new one.</p>
+        </div>
       </div>
-      <div class="ed-stage"><canvas id="ed-board"></canvas></div>
-      <div class="ed-actions">
-        <button class="primary" id="ed-test">▶ Test play</button>
-        <button id="ed-export">Export</button>
-        <button id="ed-copy">Copy</button>
-        <button id="ed-import">Import</button>
-        <button id="ed-clear">Clear</button>
-      </div>
-      <textarea id="ed-json" spellcheck="false" placeholder="Level JSON appears here — and paste your own, then Import."></textarea>
+      <textarea id="ed-json" spellcheck="false" placeholder="Export/import JSON here — Export all dumps the whole library; paste a bundle and Import to replace it."></textarea>
     </div>
 
     <script type="module" src="./dist/main.js"></script>

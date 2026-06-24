@@ -100,6 +100,12 @@ export class Game {
     this.renderer.setTheme(typeof level.world === 'number' ? level.world : 1);
   }
 
+  /** Replace the level list (e.g. after the manager edits the library). */
+  setLevels(levels: Level[]): void {
+    this.levels = levels;
+    if (this.levelIndex >= levels.length) this.levelIndex = Math.max(0, levels.length - 1);
+  }
+
   loadLevel(level: Level): void {
     const i = this.levels.indexOf(level);
     if (i >= 0) this.levelIndex = i;

@@ -8,7 +8,8 @@ import { Renderer } from './render.js';
 import { loadBundle } from './levelLoader.js';
 import { Progress } from './progress.js';
 import { AudioManager } from './sound.js';
-import { LevelEditor } from './leveleditor.js';
+import { LevelManager } from './leveleditor.js';
+import { LevelStore } from './levelStore.js';
 import { AssetManager } from './assets.js';
 function el(id) {
     const node = document.getElementById(id);
@@ -25,6 +26,9 @@ async function boot() {
     renderer.setAssets(assets);
     const [bundle] = await Promise.all([loadBundle(), assets.load()]);
     const progress = new Progress();
+    // The store is the live, persistent library that the manager edits and that
+    // the level-select + game read from. Seeded from the shipped bundle.
+    const store = new LevelStore(bundle);
     const hud = {
         levelName: el('level-name'),
         budgetUsed: el('budget-used'),
@@ -46,16 +50,17 @@ async function boot() {
         },
     };
     const audio = new AudioManager();
-    const game = new Game(canvas, renderer, hud, audio, bundle.levels, 0);
+    const game = new Game(canvas, renderer, hud, audio, store.levels(), 0);
     /* ----------------------------- level select ----------------------------- */
     const selectEl = el('levelselect');
     const worldsEl = el('ls-worlds');
     const progressEl = el('ls-progress');
     const buildSelect = () => {
-        progressEl.textContent = `${progress.completedCount()} / ${bundle.levels.length} solved`;
+        game.setLevels(store.levels()); // stay in sync with edits made in the manager
+        progressEl.textContent = `${progress.completedCount()} / ${store.levels().length} solved`;
         worldsEl.replaceChildren();
-        for (const w of bundle.worlds) {
-            const levels = bundle.levels.filter((l) => l.world === w.id);
+        for (const w of store.worlds()) {
+            const levels = store.levels().filter((l) => l.world === w.id);
             if (!levels.length)
                 continue;
             const wEl = document.createElement('div');
@@ -125,37 +130,31 @@ async function boot() {
     hud.outcome.btnReplay.addEventListener('click', () => game.replay());
     hud.outcome.btnEdit.addEventListener('click', () => game.reset());
     hud.outcome.btnNext.addEventListener('click', () => game.next());
-    /* ----------------------------- level editor (M6) ----------------------------- */
-    const edRefs = {
+    /* ----------------------------- level manager ----------------------------- */
+    const mgrRefs = {
         panel: el('editor'),
-        canvas: el('ed-board'),
-        tools: el('ed-tools'),
-        cols: el('ed-cols'),
-        rows: el('ed-rows'),
-        budget: el('ed-budget'),
-        heading: el('ed-heading'),
-        orient: el('ed-orient'),
-        color: el('ed-color'),
-        json: el('ed-json'),
+        list: el('ed-list'),
+        main: el('ed-main'),
         status: el('ed-status'),
+        json: el('ed-json'),
+        btnNew: el('ed-new'),
+        btnExportAll: el('ed-exportall'),
+        btnImportAll: el('ed-importall'),
+        btnReset: el('ed-reset'),
+        btnDone: el('ed-done'),
     };
-    const editor = new LevelEditor(edRefs, (level) => {
-        showSelect(false);
+    const manager = new LevelManager(mgrRefs, store, assets, (level) => {
+        game.setLevels(store.levels());
         game.loadLevel(level);
     });
     el('ls-editor').addEventListener('click', () => {
         showSelect(false);
-        editor.open();
+        manager.open();
     });
-    el('ed-done').addEventListener('click', () => {
-        editor.close();
-        showSelect(true);
+    mgrRefs.btnDone.addEventListener('click', () => {
+        manager.close();
+        showSelect(true); // rebuilds the select (and re-syncs game levels) from the store
     });
-    el('ed-test').addEventListener('click', () => editor.test());
-    el('ed-export').addEventListener('click', () => editor.exportJSON());
-    el('ed-copy').addEventListener('click', () => void editor.copyJSON());
-    el('ed-import').addEventListener('click', () => editor.importJSON());
-    el('ed-clear').addEventListener('click', () => editor.clear());
     /* ----------------------------- booster bar (below the board) ----------------------------- */
     // Scaffold UI placed right under the gameplay grid, built from the tinted
     // icons. No effect wired yet — each click just toasts; hook real behaviour
