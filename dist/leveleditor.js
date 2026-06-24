@@ -61,20 +61,11 @@ export class LevelManager {
         this.onDown = (e) => {
             if (e.button > 0)
                 return; // only the primary button paints/picks (ignore middle/right-click)
-            // Ignore extra pointers only while a real gesture still holds the pointer.
-            // If the active flag is stale (a prior up/cancel was missed) the capture is
-            // already gone, so we recover and start fresh instead of locking up.
-            if (this.activeId !== null && this.activeId !== e.pointerId) {
-                let held = false;
-                try {
-                    held = this.canvas.hasPointerCapture(this.activeId);
-                }
-                catch {
-                    held = false;
-                }
-                if (held)
-                    return;
-            }
+            if (!e.isPrimary)
+                return; // ignore extra fingers during a multi-touch gesture
+            // A primary press ALWAYS starts fresh: any stale gesture flags (from a missed
+            // up/cancel, e.g. after clicking the Rotate button) are cleared here, so the
+            // editor can never wedge — you can always pick the next piece.
             this.resetGesture();
             e.preventDefault();
             const cell = this.renderer.cellAt(e.clientX, e.clientY);
@@ -82,12 +73,6 @@ export class LevelManager {
                 return;
             this.activeId = e.pointerId;
             this.downXY = { x: e.clientX, y: e.clientY };
-            try {
-                this.canvas.setPointerCapture(e.pointerId);
-            }
-            catch {
-                /* unsupported / synthetic pointer */
-            }
             this.hoverCell = null; // a gesture is starting; drop the hover highlight
             if (this.tool === 'select') {
                 this.selection = this.pick(cell.x, cell.y);
@@ -174,33 +159,19 @@ export class LevelManager {
                     }
                 }
             }
-            try {
-                this.canvas.releasePointerCapture(e.pointerId);
-            }
-            catch {
-                /* ignore */
-            }
             this.resetGesture();
             this.activeId = null;
             this.draw();
         };
-        /** A touch/pen gesture was interrupted (scroll, palm, OS back-swipe), or pointer
-         *  capture was lost: abandon it cleanly — never commit a move — and clear state. */
+        /** A touch/pen gesture was interrupted (scroll, palm, OS back-swipe): abandon it
+         *  cleanly — never commit a move — and clear state. */
         this.onCancel = (e) => {
             if (this.activeId !== null && e.pointerId !== this.activeId)
                 return;
-            try {
-                this.canvas.releasePointerCapture(e.pointerId);
-            }
-            catch {
-                /* ignore */
-            }
             this.resetGesture();
             this.activeId = null;
             this.draw();
         };
-        /** Backstop: whenever the canvas loses the captured pointer (up/cancel/loss),
-         *  guarantee a clean slate so a missed event can never leave the editor stuck. */
         /** Pointer left the board with no gesture in flight — drop the erase hover ring. */
         this.onLeave = () => {
             if (this.activeId === null && this.hoverCell) {
@@ -208,10 +179,6 @@ export class LevelManager {
                 this.status('');
                 this.draw();
             }
-        };
-        this.onLost = () => {
-            this.resetGesture();
-            this.activeId = null;
         };
         this.onKey = (e) => {
             if (!this.refs.panel.classList.contains('show'))
@@ -273,7 +240,6 @@ export class LevelManager {
         this.renderer.setAssets(assets);
         this.canvas.addEventListener('pointerdown', this.onDown, { passive: false });
         this.canvas.addEventListener('pointermove', this.onMove, { passive: false });
-        this.canvas.addEventListener('lostpointercapture', this.onLost);
         this.canvas.addEventListener('pointerleave', this.onLeave);
         window.addEventListener('pointerup', this.onUp);
         window.addEventListener('pointercancel', this.onCancel);
@@ -983,7 +949,19 @@ export class LevelManager {
             this.addTrackEdge(a.x, a.y, h);
         if (tb === 'lay')
             this.addTrackEdge(b.x, b.y, OPPOSITE[h]);
+        // A tunnel you connect track to turns its mouth to face that track, so the
+        // machine lines up with the rail even when it was placed before the track.
+        this.faceTunnel(a.x, a.y, h);
+        this.faceTunnel(b.x, b.y, OPPOSITE[h]);
         this.rebuildTrackTiles();
+    }
+    /** Point a tunnel at (x,y) toward `dir` (the cell the track connects from). */
+    faceTunnel(x, y, dir) {
+        const t = this.level?.fixedTiles.find((t) => t.type === 'tunnel' && t.x === x && t.y === y);
+        if (t) {
+            t.edges = [dir];
+            delete t.mask;
+        }
     }
     addTrackEdge(x, y, h) {
         const key = `${x},${y}`;
