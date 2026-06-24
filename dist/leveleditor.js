@@ -57,7 +57,10 @@ export class LevelManager {
         this.activeId = null; // the one pointer that owns the current gesture
         this.outside = false; // pointer left the board mid-paint (don't bridge track across the gap)
         this.hoverCell = null; // Erase tool: cell under the cursor
+        this.downXY = null; // Select: pointerdown px, for a move threshold
         this.onDown = (e) => {
+            if (e.button > 0)
+                return; // only the primary button paints/picks (ignore middle/right-click)
             // Ignore extra pointers only while a real gesture still holds the pointer.
             // If the active flag is stale (a prior up/cancel was missed) the capture is
             // already gone, so we recover and start fresh instead of locking up.
@@ -78,6 +81,7 @@ export class LevelManager {
             if (!cell)
                 return;
             this.activeId = e.pointerId;
+            this.downXY = { x: e.clientX, y: e.clientY };
             try {
                 this.canvas.setPointerCapture(e.pointerId);
             }
@@ -155,7 +159,11 @@ export class LevelManager {
             if (this.refs.panel.classList.contains('show') && this.tool === 'select' && this.dragging) {
                 const to = this.dragHover;
                 const from = this.selectedPos();
-                if (to && from && (to.x !== from.x || to.y !== from.y)) {
+                // Only treat it as a move if the pointer actually travelled — a tap with a
+                // little jitter near a cell border should just (re)select, not relocate.
+                const threshold = this.renderer.layout.cell * 0.4;
+                const travelled = this.downXY ? Math.hypot(e.clientX - this.downXY.x, e.clientY - this.downXY.y) > threshold : true;
+                if (travelled && to && from && (to.x !== from.x || to.y !== from.y)) {
                     if (this.canDropAt(to.x, to.y)) {
                         this.moveSelectedTo(to.x, to.y);
                         this.afterEdit();
@@ -193,6 +201,14 @@ export class LevelManager {
         };
         /** Backstop: whenever the canvas loses the captured pointer (up/cancel/loss),
          *  guarantee a clean slate so a missed event can never leave the editor stuck. */
+        /** Pointer left the board with no gesture in flight — drop the erase hover ring. */
+        this.onLeave = () => {
+            if (this.activeId === null && this.hoverCell) {
+                this.hoverCell = null;
+                this.status('');
+                this.draw();
+            }
+        };
         this.onLost = () => {
             this.resetGesture();
             this.activeId = null;
@@ -258,6 +274,7 @@ export class LevelManager {
         this.canvas.addEventListener('pointerdown', this.onDown, { passive: false });
         this.canvas.addEventListener('pointermove', this.onMove, { passive: false });
         this.canvas.addEventListener('lostpointercapture', this.onLost);
+        this.canvas.addEventListener('pointerleave', this.onLeave);
         window.addEventListener('pointerup', this.onUp);
         window.addEventListener('pointercancel', this.onCancel);
         window.addEventListener('keydown', this.onKey);
@@ -357,7 +374,9 @@ export class LevelManager {
         }
     }
     selectLevel(id) {
-        if (this.dirty && this.editingId !== id && !confirm('Discard unsaved changes to this level?'))
+        if (this.dirty && id === this.editingId)
+            return; // re-clicking the open level keeps your edits
+        if (this.dirty && !confirm('Discard unsaved changes to this level?'))
             return;
         const src = this.store.get(id);
         if (!src)
@@ -499,7 +518,9 @@ export class LevelManager {
         L.name = this.inputs.name.value.trim() || 'Untitled';
         L.world = Math.max(1, Math.floor(Number(this.inputs.world.value) || 1));
         L.trackBudget = Math.max(0, Math.floor(Number(this.inputs.budget.value) || 0));
-        L.objectives = { couple: 'all-in-order', passengers: Math.max(0, Math.floor(Number(this.inputs.passengers.value) || 0)) };
+        // Preserve any authored objective keys / non-default couple mode; only the
+        // passengers field is editable here.
+        L.objectives = { ...(L.objectives ?? {}), couple: L.objectives?.couple ?? 'all-in-order', passengers: Math.max(0, Math.floor(Number(this.inputs.passengers.value) || 0)) };
     }
     onMetaChange() {
         if (!this.level)
@@ -572,6 +593,7 @@ export class LevelManager {
                 removeEntities();
                 removeTiles();
                 L.fixedTiles.push({ x, y, type: 'exit', heading: h });
+                this.absorbTrackInto(x, y); // don't leave an orphan rail under the exit
                 break;
             case 'rock':
                 removeEntities();
@@ -589,22 +611,26 @@ export class LevelManager {
                 removeEntities();
                 removeTiles();
                 L.fixedTiles.push({ x, y, type: 'gate', edges: edgesHV, color, open: this.openChk.checked });
+                this.absorbTrackInto(x, y);
                 break;
             case 'button':
                 removeEntities();
                 removeTiles();
                 // No colour selected => master button (opens every gate).
                 L.fixedTiles.push({ x, y, type: 'button', edges: edgesHV, color: color || undefined });
+                this.absorbTrackInto(x, y);
                 break;
             case 'signal':
                 removeEntities();
                 removeTiles();
                 L.fixedTiles.push({ x, y, type: 'signal', edges: edgesHV, open: this.openChk.checked });
+                this.absorbTrackInto(x, y);
                 break;
             case 'switch':
                 removeEntities();
                 removeTiles();
                 L.fixedTiles.push({ x, y, type: 'switch', edges: edgesHV, color });
+                this.absorbTrackInto(x, y);
                 break;
             case 'wagon':
                 removeEntities();
@@ -631,6 +657,23 @@ export class LevelManager {
         const m = this.railMaskOf(t);
         if (m !== 0)
             this.trackMask.set(`${t.x},${t.y}`, (this.trackMask.get(`${t.x},${t.y}`) ?? 0) | m);
+    }
+    /** When a tile lands on a cell that already holds laid track, reconcile the two
+     *  rail definitions into one: a rail-bearing obstacle aligns to (absorbs) the
+     *  existing rail; either way the orphan trackMask entry is cleared so a cell
+     *  never carries two independent rails (which buildGrid mis-merges into a
+     *  phantom crossing). No-op when there is no laid track there. */
+    absorbTrackInto(x, y) {
+        const m = this.trackMask.get(`${x},${y}`) ?? 0;
+        if (m === 0 || !this.level)
+            return;
+        const tile = this.level.fixedTiles.find((t) => t.type !== 'track' && t.x === x && t.y === y);
+        if (tile && (tile.type === 'gate' || tile.type === 'button' || tile.type === 'signal' || tile.type === 'switch')) {
+            tile.edges = edgeList(m); // snap the obstacle to the rail it was dropped on
+            delete tile.mask;
+        }
+        this.trackMask.delete(`${x},${y}`);
+        this.rebuildTrackTiles();
     }
     /** What the next erase click on this cell would remove (top-most first), or null. */
     eraseTargetName(x, y) {
@@ -724,6 +767,8 @@ export class LevelManager {
         else {
             s.ref.x = x;
             s.ref.y = y;
+            if (s.kind === 'tile')
+                this.absorbTrackInto(x, y); // a tile dropped on track absorbs it (no double rail)
         }
     }
     /** Strict: refuse any drop that stacks two pieces in one cell (an obstacle can
@@ -884,10 +929,9 @@ export class LevelManager {
         for (const t of this.level.fixedTiles) {
             if (t.type !== 'track')
                 continue;
-            let m = typeof t.mask === 'number' ? t.mask : 0;
-            if (t.edges)
-                for (const e of t.edges)
-                    m = addEdge(m, e);
+            // Match buildGrid's edgesToMask precedence exactly (a raw mask wins over
+            // edges) so the editor and the game agree on the shape.
+            const m = typeof t.mask === 'number' ? t.mask : (t.edges ?? []).reduce((a, e) => addEdge(a, e), 0);
             this.trackMask.set(`${t.x},${t.y}`, m);
         }
     }
@@ -1007,6 +1051,19 @@ export class LevelManager {
         if (!this.level)
             return;
         this.readInputs();
+        // Refuse a rename that would clobber a different existing level.
+        if (this.level.id !== this.editingId && this.store.get(this.level.id)) {
+            this.status(`A level with id "${this.level.id}" already exists — pick another id.`);
+            this.level.id = this.editingId;
+            this.inputs.id.value = this.editingId;
+            return;
+        }
+        // Don't silently persist a level that can't be played.
+        const issues = this.validate();
+        if (issues.some((i) => i.level === 'error') && !confirm('This level has errors and may be unplayable. Save anyway?')) {
+            this.status('Fix the errors before saving.');
+            return;
+        }
         if (this.level.id !== this.editingId)
             this.store.remove(this.editingId);
         this.store.save(this.level);
