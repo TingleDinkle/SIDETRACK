@@ -627,11 +627,12 @@ export class Renderer {
         ctx.restore();
     }
     /* ----------------------------- tiles ----------------------------- */
-    /** Flat floor markings (start zone, exit target, button, switch) sit UNDER the
-     *  rails; 3-D objects (rock, tunnel, gate, signal) sit OVER them. The two layers
-     *  are drawn in separate passes around drawTrack. */
+    /** Only the start zone and exit target are floor markings the rails run OVER.
+     *  Everything else (rock, tunnel, gate, signal, button, switch) is an obstacle
+     *  that sits OVER the rails. The two layers draw in separate passes around
+     *  drawTrack. */
     isGroundMarker(c) {
-        return c.type === 'start' || c.type === 'exit' || c.type === 'button' || c.type === 'switch';
+        return c.type === 'start' || c.type === 'exit';
     }
     drawTileMarker(c, grid, dyn, layer) {
         if (this.isGroundMarker(c) !== (layer === 'ground'))
