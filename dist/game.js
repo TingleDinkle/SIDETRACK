@@ -189,7 +189,7 @@ export class Game {
             for (const w of s.coupled) {
                 const p = pos(w.px, w.py, w.x, w.y);
                 chain.push(p);
-                out.push({ kind: 'wagon', x: p.x, y: p.y, heading: dirOf(w.x - w.px, w.y - w.py, w.heading), number: w.number });
+                out.push({ kind: 'wagon', x: p.x, y: p.y, heading: dirOf(w.x - w.px, w.y - w.py, w.heading), number: w.number, coupled: true });
             }
             for (const m of s.movers) {
                 const p = pos(m.px, m.py, m.x, m.y);

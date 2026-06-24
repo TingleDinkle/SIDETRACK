@@ -47,6 +47,7 @@ const PAL = {
     exitB: '#f1e3cf',
     loco: '#3f6fa3',
     locoCab: '#2d5680',
+    coupledWagon: '#5f82c8', // recolour a coupled wagon to the loco's blue
     wagon: '#cf8740',
     wagonDark: '#a96a2c',
     ink: '#fbf6ec',
@@ -283,7 +284,7 @@ export class Renderer {
                 this.drawLocomotive(e.x, e.y, e.heading);
                 break;
             case 'wagon':
-                this.drawWagon(e.x, e.y, e.number ?? 0, e.heading);
+                this.drawWagon(e.x, e.y, e.number ?? 0, e.heading, e.coupled ?? false);
                 break;
             case 'mover':
                 this.drawMover(e.x, e.y, e.heading);
@@ -1011,16 +1012,20 @@ export class Renderer {
         ctx.fill();
         ctx.restore();
     }
-    drawWagon(x, y, num, h = 'E') {
+    drawWagon(x, y, num, h = 'E', coupled = false) {
         const ctx = this.ctx;
         const { left, top, size } = this.cellRect(x, y);
         const cx = left + size / 2;
         const cy = top + size / 2;
         const w = size * 0.66;
         // A single wagon sprite serves every number — the sprite faces its heading,
-        // the digit is drawn upright on top.
+        // the digit is drawn upright on top. A coupled wagon is recoloured to the
+        // loco's blue so it visibly joins the train.
         if (this.assets?.has('wagon')) {
-            this.assets.draw(ctx, 'wagon', cx, cy, size * 0.86, size * 0.86, this.headingAngle(h));
+            if (coupled)
+                this.assets.drawRecolored(ctx, 'wagon', cx, cy, size * 0.86, size * 0.86, PAL.coupledWagon, this.headingAngle(h));
+            else
+                this.assets.draw(ctx, 'wagon', cx, cy, size * 0.86, size * 0.86, this.headingAngle(h));
             ctx.save();
             ctx.fillStyle = PAL.ink;
             ctx.font = `800 ${Math.round(size * 0.36)}px system-ui, sans-serif`;
