@@ -18,6 +18,7 @@ import { Grid } from './grid.js';
 import { DrawEntity, DynamicState, Renderer } from './render.js';
 import { Simulation } from './sim.js';
 import { AudioManager } from './sound.js';
+import { Heading } from './types.js';
 
 export type GameState = 'editing' | 'running' | 'paused' | 'won' | 'lost';
 
@@ -201,15 +202,18 @@ export class Game {
     // Cosmetic scenery (only drawn when matching sprites are loaded).
     for (const d of this.level.decor ?? [])
       out.push({ kind: 'decor', x: d.x, y: d.y, heading: 'N', sprite: d.sprite, scale: d.scale });
+    // Facing from a discrete cell delta (cosmetic wagon orientation).
+    const dirOf = (dx: number, dy: number, fb: Heading): Heading =>
+      dx === 0 && dy === 0 ? fb : Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N';
     if (this.sim) {
       const s = this.sim;
-      for (const w of s.free) out.push({ kind: 'wagon', x: w.x, y: w.y, heading: 'N', number: w.number });
+      for (const w of s.free) out.push({ kind: 'wagon', x: w.x, y: w.y, heading: w.heading, number: w.number });
       const lp = pos(s.loco.px, s.loco.py, s.loco.x, s.loco.y);
       const chain: { x: number; y: number }[] = [lp]; // front-to-back train positions
       for (const w of s.coupled) {
         const p = pos(w.px, w.py, w.x, w.y);
         chain.push(p);
-        out.push({ kind: 'wagon', x: p.x, y: p.y, heading: 'N', number: w.number });
+        out.push({ kind: 'wagon', x: p.x, y: p.y, heading: dirOf(w.x - w.px, w.y - w.py, w.heading), number: w.number });
       }
       for (const m of s.movers) {
         const p = pos(m.px, m.py, m.x, m.y);
@@ -234,7 +238,7 @@ export class Game {
       }
     } else {
       const L = this.level;
-      for (const w of L.wagons ?? []) out.push({ kind: 'wagon', x: w.x, y: w.y, heading: 'N', number: w.number });
+      for (const w of L.wagons ?? []) out.push({ kind: 'wagon', x: w.x, y: w.y, heading: w.heading ?? 'E', number: w.number });
       for (const m of L.movers ?? []) out.push({ kind: 'mover', x: m.x, y: m.y, heading: m.heading });
       out.push({ kind: 'loco', x: L.locomotive.x, y: L.locomotive.y, heading: L.locomotive.heading });
     }

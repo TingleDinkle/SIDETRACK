@@ -39,6 +39,7 @@ export interface SimWagon {
   px: number;
   py: number;
   coupled: boolean;
+  heading: Heading;
 }
 export interface SimMover {
   x: number;
@@ -94,7 +95,7 @@ export class Simulation {
     const L = level.locomotive;
     this.loco = { x: L.x, y: L.y, px: L.x, py: L.y, heading: L.heading };
     this.trail = [{ x: L.x, y: L.y }];
-    this.free = (level.wagons ?? []).map((w) => ({ number: w.number, x: w.x, y: w.y, px: w.x, py: w.y, coupled: false }));
+    this.free = (level.wagons ?? []).map((w) => ({ number: w.number, x: w.x, y: w.y, px: w.x, py: w.y, coupled: false, heading: w.heading ?? 'E' }));
     this.requiredCount = this.free.length;
     this.movers = (level.movers ?? []).map((m) => ({ x: m.x, y: m.y, px: m.x, py: m.y, heading: m.heading, alive: true }));
     this.maxTicks = grid.cols * grid.rows * 8 + 100;

@@ -634,7 +634,7 @@ export class LevelManager {
                 break;
             case 'wagon':
                 removeEntities();
-                (L.wagons ?? (L.wagons = [])).push({ x, y, number: (L.wagons?.length ?? 0) + 1 });
+                (L.wagons ?? (L.wagons = [])).push({ x, y, number: (L.wagons?.length ?? 0) + 1, heading: h });
                 break;
             case 'mover':
                 removeEntities();
@@ -834,8 +834,9 @@ export class LevelManager {
             }
         }
         else {
-            this.status('Wagons follow the train — nothing to rotate.');
-            return;
+            // wagon: cycle its initial facing (cosmetic — it turns to its travel
+            // direction once the train moves).
+            s.ref.heading = ROT_CW[s.ref.heading ?? 'E'];
         }
         this.afterEdit();
         this.updateSelBar();
@@ -877,7 +878,7 @@ export class LevelManager {
         this.selLabel.textContent = has
             ? `Selected: ${this.selectedName()} — drag to move · ↻ / R to rotate`
             : 'Tap a piece (train, wagon, mover, obstacle) to move or rotate it.';
-        const noRot = !this.selection || this.selection.kind === 'wagon' || (this.selection.kind === 'tile' && this.selection.ref.type === 'rock');
+        const noRot = !this.selection || (this.selection.kind === 'tile' && this.selection.ref.type === 'rock');
         this.selRotBtn.disabled = noRot;
         this.selDelBtn.disabled = !this.selection || this.selection.kind === 'loco';
     }
@@ -1024,7 +1025,7 @@ export class LevelManager {
         for (const d of this.level.decor ?? [])
             ents.push({ kind: 'decor', x: d.x, y: d.y, heading: 'N', sprite: d.sprite, scale: d.scale });
         for (const w of this.level.wagons ?? [])
-            ents.push({ kind: 'wagon', x: w.x, y: w.y, heading: 'N', number: w.number });
+            ents.push({ kind: 'wagon', x: w.x, y: w.y, heading: w.heading ?? 'E', number: w.number });
         for (const m of this.level.movers ?? [])
             ents.push({ kind: 'mover', x: m.x, y: m.y, heading: m.heading });
         ents.push({ kind: 'loco', x: this.level.locomotive.x, y: this.level.locomotive.y, heading: this.level.locomotive.heading });

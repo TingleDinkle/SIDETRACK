@@ -28,6 +28,8 @@ export interface LevelWagon {
   x: number;
   y: number;
   number: number;
+  /** Initial facing (cosmetic — wagons turn to their travel direction once moving). */
+  heading?: Heading;
 }
 
 export interface LevelMover {

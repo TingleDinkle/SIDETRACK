@@ -343,7 +343,7 @@ export class Renderer {
         this.drawLocomotive(e.x, e.y, e.heading);
         break;
       case 'wagon':
-        this.drawWagon(e.x, e.y, e.number ?? 0);
+        this.drawWagon(e.x, e.y, e.number ?? 0, e.heading);
         break;
       case 'mover':
         this.drawMover(e.x, e.y, e.heading);
@@ -1075,15 +1075,16 @@ export class Renderer {
     ctx.restore();
   }
 
-  private drawWagon(x: number, y: number, num: number): void {
+  private drawWagon(x: number, y: number, num: number, h: Heading = 'E'): void {
     const ctx = this.ctx;
     const { left, top, size } = this.cellRect(x, y);
     const cx = left + size / 2;
     const cy = top + size / 2;
     const w = size * 0.66;
-    // A single wagon sprite serves every number — the digit is drawn on top.
+    // A single wagon sprite serves every number — the sprite faces its heading,
+    // the digit is drawn upright on top.
     if (this.assets?.has('wagon')) {
-      this.assets.draw(ctx, 'wagon', cx, cy, size * 0.86, size * 0.86, 0);
+      this.assets.draw(ctx, 'wagon', cx, cy, size * 0.86, size * 0.86, this.headingAngle(h));
       ctx.save();
       ctx.fillStyle = PAL.ink;
       ctx.font = `800 ${Math.round(size * 0.36)}px system-ui, sans-serif`;
