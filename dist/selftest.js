@@ -277,6 +277,31 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
         const s = run(g, lvl(5, 1, { x: 0, y: 0, heading: 'E' }), 400);
         eq('sim: unbuttoned gate blocks -> lose', s.status, 'lost');
     }
+    // J2) a master (colourless) button opens EVERY gate, of any colour -> win
+    {
+        const g = new Grid(7, 1);
+        start(g, 0, 0, 'E');
+        track(g, 1, 0, EW);
+        special(g, 2, 0, 'button', EW, {}); // no colour = master
+        special(g, 3, 0, 'gate', EW, { color: 'red', open: false });
+        special(g, 4, 0, 'gate', EW, { color: 'blue', open: false });
+        track(g, 5, 0, EW);
+        exit(g, 6, 0, 'W');
+        const s = run(g, lvl(7, 1, { x: 0, y: 0, heading: 'E' }));
+        eq('sim: master button opens all gates -> win', s.status, 'won');
+    }
+    // J3) a small (coloured) button only opens its own colour, not others -> lose
+    {
+        const g = new Grid(6, 1);
+        start(g, 0, 0, 'E');
+        special(g, 1, 0, 'button', EW, { color: 'red' }); // red button...
+        track(g, 2, 0, EW);
+        special(g, 3, 0, 'gate', EW, { color: 'blue', open: false }); // ...can't open a blue gate
+        track(g, 4, 0, EW);
+        exit(g, 5, 0, 'W');
+        const s = run(g, lvl(6, 1, { x: 0, y: 0, heading: 'E' }), 400);
+        eq('sim: small button leaves other colours shut -> lose', s.status, 'lost');
+    }
     // K) a closed signal holds the loco one tick, then opens -> win
     {
         const g = new Grid(4, 1);

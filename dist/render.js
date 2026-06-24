@@ -676,7 +676,7 @@ export class Renderer {
             case 'rock': return { name: 'tile_rock', rot: 0, shadow: true };
             case 'exit': return { name: 'tile_exit', rot: 0, shadow: false };
             case 'start': return { name: 'tile_start', rot: 0, shadow: false };
-            case 'button': return { name: 'tile_button', rot: 0, shadow: false };
+            // buttons are drawn by drawButton (colour-tinted small vs neutral master)
             case 'switch': return { name: 'tile_switch', rot: 0, shadow: false };
             case 'tunnel': {
                 const mouth = edgeList(c.mask)[0] ?? 'E';
@@ -694,13 +694,49 @@ export class Renderer {
                 return null;
         }
     }
-    /** A drive-over button: a round pad in its link colour. */
+    /**
+     * A drive-over button. The baked plate (`tile_button` small / `tile_button_master`
+     * large) keeps its model look; a centred pip shows the link: a coloured pip for a
+     * small button (matching its one gate's colour) or a white "all" pip for a
+     * colourless master button (which opens every gate).
+     */
     drawButton(c) {
         const ctx = this.ctx;
         const { left, top, size } = this.cellRect(c.x, c.y);
         const cx = left + size / 2;
         const cy = top + size / 2;
-        const col = linkColor(c.color);
+        const master = !c.color;
+        const sprite = master ? 'tile_button_master' : 'tile_button';
+        if (this.assets && this.assets.has(sprite)) {
+            this.assets.draw(ctx, sprite, cx, cy, size * 0.94, size * 0.94);
+            ctx.save();
+            const pr = master ? size * 0.085 : size * 0.135;
+            // pip body
+            ctx.fillStyle = master ? 'rgba(244,247,252,0.95)' : linkColor(c.color);
+            ctx.beginPath();
+            ctx.arc(cx, cy, pr, 0, Math.PI * 2);
+            ctx.fill();
+            // thin dark rim + soft highlight so the pip reads as a lamp
+            ctx.lineWidth = Math.max(1, size * 0.02);
+            ctx.strokeStyle = 'rgba(20,18,28,0.4)';
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(255,255,255,0.45)';
+            ctx.beginPath();
+            ctx.arc(cx - pr * 0.3, cy - pr * 0.3, pr * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            if (master) {
+                // ring around the pip to read as "opens everything"
+                ctx.strokeStyle = 'rgba(244,247,252,0.8)';
+                ctx.lineWidth = Math.max(1, size * 0.022);
+                ctx.beginPath();
+                ctx.arc(cx, cy, size * 0.17, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            ctx.restore();
+            return;
+        }
+        // Procedural fallback: a round pad (link colour, or grey for master).
+        const col = master ? '#8f99a8' : linkColor(c.color);
         ctx.save();
         ctx.fillStyle = 'rgba(0,0,0,0.12)';
         ctx.beginPath();

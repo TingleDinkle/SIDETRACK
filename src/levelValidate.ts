@@ -76,13 +76,17 @@ export function validateLevel(L: Level): Issue[] {
     else if (n !== 2) err(`Tunnel pair ${pid} needs exactly 2 tunnels (has ${n}).`);
   }
 
-  /* ---- coloured links: gate/button/switch need a colour to work ---- */
-  const buttonColors = new Set(tiles.filter((t) => t.type === 'button').map((t) => t.color));
-  for (const g of tiles.filter((t) => t.type === 'gate')) {
+  /* ---- coloured links: gate/switch need a colour; a colourless button is a
+         master that opens every gate ---- */
+  const buttons = tiles.filter((t) => t.type === 'button');
+  const buttonColors = new Set(buttons.filter((b) => b.color).map((b) => b.color));
+  const hasMaster = buttons.some((b) => !b.color);
+  const gates = tiles.filter((t) => t.type === 'gate');
+  for (const g of gates) {
     if (!g.color) err('A gate has no colour — it can never be opened.');
-    else if (!g.open && !buttonColors.has(g.color)) warn(`Closed gate "${g.color}" has no matching button — it can never open.`);
+    else if (!g.open && !buttonColors.has(g.color) && !hasMaster) warn(`Closed gate "${g.color}" has no matching button — it can never open.`);
   }
-  for (const b of tiles.filter((t) => t.type === 'button')) if (!b.color) err('A button has no colour — it toggles no gate.');
+  if (hasMaster && !gates.length) warn('A master button has no gates to open.');
   for (const s of tiles.filter((t) => t.type === 'switch')) if (!s.color) warn('A switch has no colour — it flips nothing.');
 
   /* ---- unsupported objective ---- */

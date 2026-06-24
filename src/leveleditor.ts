@@ -273,7 +273,9 @@ export class LevelManager {
     this.orient.add(new Option('↔ horizontal', 'H'));
     this.orient.add(new Option('↕ vertical', 'V'));
     this.color = el('select');
-    for (const c of ['red', 'blue', 'green', 'yellow']) this.color.add(new Option(c, c));
+    for (const c of ['red', 'blue', 'green', 'yellow', 'purple', 'orange']) this.color.add(new Option(c, c));
+    // Colourless = a master button (opens every gate). Only meaningful for buttons.
+    this.color.add(new Option('★ master (opens all)', ''));
     this.openChk = el('input');
     this.openChk.type = 'checkbox';
     const openLabel = el('label', undefined, 'open ');
@@ -444,7 +446,8 @@ export class LevelManager {
       case 'button':
         removeEntities();
         removeTiles();
-        L.fixedTiles.push({ x, y, type: 'button', edges: edgesHV, color });
+        // No colour selected => master button (opens every gate).
+        L.fixedTiles.push({ x, y, type: 'button', edges: edgesHV, color: color || undefined });
         break;
       case 'signal':
         removeEntities();

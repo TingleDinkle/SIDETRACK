@@ -135,10 +135,19 @@ export class Simulation {
         };
     }
     applyEnterEffects(cell) {
-        if (cell.type === 'button' && cell.color) {
-            // A held gate colour ignores its button (frozen open/closed).
-            if (!this.held.has('gate:' + cell.color))
-                this.gateOpen.set(cell.color, !(this.gateOpen.get(cell.color) ?? false));
+        if (cell.type === 'button') {
+            if (cell.color) {
+                // Small button: toggle its own link-colour gate (held colour ignores it).
+                if (!this.held.has('gate:' + cell.color))
+                    this.gateOpen.set(cell.color, !(this.gateOpen.get(cell.color) ?? false));
+            }
+            else {
+                // Master button (no colour): open every gate at once (skip held colours).
+                for (const g of this.grid.cells) {
+                    if (g.type === 'gate' && g.color && !this.held.has('gate:' + g.color))
+                        this.gateOpen.set(g.color, true);
+                }
+            }
             this.events.push('button');
         }
         else if (cell.type === 'switch' && cell.color) {
