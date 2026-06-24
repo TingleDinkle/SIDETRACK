@@ -1,1 +1,0 @@
-{"grid":{"cols":5,"rows":1},"trackBudget":3,"locomotive":{"x":0,"y":0,"heading":"E"},"fixedTiles":[{"x":4,"y":0,"type":"exit","heading":"W"}],"wagons":[{"x":999,"y":999,"number":1}],"objectives":{"couple":"all-in-order","passengers":0}}

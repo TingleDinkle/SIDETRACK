@@ -2,6 +2,15 @@ node_modules/
 *.log
 # Local headless smoke-test scaffolding (not part of the game)
 __*.html
+# Scratch test files (e.g. left by agents) — never part of the repo
+/test_*.mjs
+/test-*.mjs
+/test_*.js
+/test-*.js
+/test_*.json
+/test-*.json
+# Compiled JS belongs in dist/, never in src/
+src/*.js
+src/*.js.map
 # Source 3D art pack (18MB, not used at runtime — bake to PNG sprites instead).
-# Keep it locally; don't bloat the repo. Remove this line if you want it tracked.
 src/Models/
