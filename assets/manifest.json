@@ -13,6 +13,9 @@
     "tile_button":        { "src": "baked/tile_button.png" },
     "tile_button_master": { "src": "baked/tile_button_master.png" },
 
+    "tile_tunnel": { "src": "baked/tile_tunnel.png" },
+    "tile_gate":   { "src": "baked/tile_gate.png" },
+
     "icon_loco":        { "src": "icons/steam-locomotive.png" },
     "icon_wagon":       { "src": "icons/mine-wagon.png" },
     "icon_rail":        { "src": "icons/rail-road.png" },

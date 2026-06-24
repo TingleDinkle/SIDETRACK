@@ -133,6 +133,70 @@ export class AssetManager {
         this.tintCache.set(key, canvas);
         return canvas;
     }
+    /**
+     * Recolour a sprite's saturated (coloured) pixels to `color`, keeping their
+     * shading and leaving near-grey pixels untouched. Used to map the yellow
+     * structure-barrier to a gate's link colour: the coloured part's luminance
+     * scales the target colour (so highlights/shadows survive) while metal greys
+     * stay grey. Cached per (name, color).
+     */
+    recolored(name, color) {
+        const key = 're|' + name + '|' + color;
+        const cached = this.tintCache.get(key);
+        if (cached !== undefined)
+            return cached;
+        const canvas = this.extract(name);
+        if (canvas) {
+            const x = canvas.getContext('2d');
+            const img = x.getImageData(0, 0, canvas.width, canvas.height);
+            const d = img.data;
+            const sat = (r, g, b) => {
+                const mx = Math.max(r, g, b);
+                return mx === 0 ? 0 : (mx - Math.min(r, g, b)) / mx;
+            };
+            const lum = (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b;
+            // Reference luminance: the average brightness of the coloured pixels, so
+            // the base colour maps onto the target at full strength.
+            let sum = 0;
+            let cnt = 0;
+            for (let i = 0; i < d.length; i += 4) {
+                if (d[i + 3] < 8)
+                    continue;
+                if (sat(d[i], d[i + 1], d[i + 2]) > 0.22) {
+                    sum += lum(d[i], d[i + 1], d[i + 2]);
+                    cnt++;
+                }
+            }
+            const base = cnt ? sum / cnt : 200;
+            const [tr, tg, tb] = parseColor(color);
+            for (let i = 0; i < d.length; i += 4) {
+                if (d[i + 3] < 8)
+                    continue;
+                if (sat(d[i], d[i + 1], d[i + 2]) <= 0.22)
+                    continue; // keep greys
+                const f = lum(d[i], d[i + 1], d[i + 2]) / base;
+                d[i] = Math.min(255, Math.round(tr * f));
+                d[i + 1] = Math.min(255, Math.round(tg * f));
+                d[i + 2] = Math.min(255, Math.round(tb * f));
+            }
+            x.putImageData(img, 0, 0);
+        }
+        this.tintCache.set(key, canvas);
+        return canvas;
+    }
+    /** Draw a recoloured sprite to fit a w×h box centred on (cx,cy). */
+    drawRecolored(ctx, name, cx, cy, w, h, color, rot = 0) {
+        const c = this.recolored(name, color);
+        if (!c)
+            return false;
+        ctx.save();
+        ctx.translate(cx, cy);
+        if (rot)
+            ctx.rotate(rot);
+        ctx.drawImage(c, -w / 2, -h / 2, w, h);
+        ctx.restore();
+        return true;
+    }
     /** Draw a tinted icon centred in a w×h box. Returns false if not loaded. */
     drawIcon(ctx, name, cx, cy, w, h, color = '#ffffff') {
         const c = this.tinted(name, color);

@@ -320,13 +320,14 @@ export class Renderer {
         const s = cell * (e.scale ?? 1);
         this.assets.draw(this.ctx, e.sprite, ox + (e.x + 0.5) * cell, oy + (e.y + 0.92) * cell, s, s);
     }
-    /** Soft contact shadow under an entity for depth. */
+    /** Whisper-faint contact shadow — cool-toned and low opacity so it sinks into
+     *  the dark mine floor instead of reading as a black blob under the train. */
     contactShadow(cx, cy, w) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.fillStyle = 'rgba(40,28,12,0.18)';
+        ctx.fillStyle = 'rgba(12,14,22,0.10)';
         ctx.beginPath();
-        ctx.ellipse(cx, cy + w * 0.34, w * 0.42, w * 0.18, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy + w * 0.32, w * 0.38, w * 0.15, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     }
@@ -671,7 +672,6 @@ export class Renderer {
     }
     /** Sprite name + rotation + shadow flag for a fixed tile (null if none). */
     tileSpriteFor(c, grid, dyn) {
-        const horizontal = (c.mask & 2 || c.mask & 8) !== 0;
         switch (c.type) {
             case 'rock': return { name: 'tile_rock', rot: 0, shadow: true };
             case 'exit': return { name: 'tile_exit', rot: 0, shadow: false };
@@ -682,10 +682,8 @@ export class Renderer {
                 const mouth = edgeList(c.mask)[0] ?? 'E';
                 return { name: 'tile_tunnel', rot: this.headingAngle(mouth), shadow: true };
             }
-            case 'gate': {
-                const open = dyn ? dyn.gateOpen(c.color ?? '') : c.open ?? false;
-                return { name: open ? 'tile_gate_open' : 'tile_gate_closed', rot: horizontal ? 0 : Math.PI / 2, shadow: false };
-            }
+            case 'gate':
+                return null; // drawGate renders the link-colour-recoloured barrier sprite
             case 'signal': {
                 const open = dyn ? dyn.signalOpen(grid.idx(c.x, c.y)) : c.open ?? true;
                 return { name: open ? 'tile_signal_green' : 'tile_signal_red', rot: 0, shadow: false };
@@ -779,7 +777,11 @@ export class Renderer {
         ctx.stroke();
         ctx.restore();
     }
-    /** A gate across the track: a coloured bar (filled = closed, hollow = open). */
+    /**
+     * A gate across the track: the structure-barrier sprite recoloured from its
+     * model yellow to the gate's link colour (so it matches its button). Solid when
+     * closed; ghosted (raised) when open. Falls back to a drawn bar without art.
+     */
     drawGate(c, open) {
         const ctx = this.ctx;
         const { left, top, size } = this.cellRect(c.x, c.y);
@@ -787,6 +789,15 @@ export class Renderer {
         const cy = top + size / 2;
         const col = linkColor(c.color);
         const horizontal = (c.mask & 2 || c.mask & 8) !== 0; // track runs E/W -> bar is vertical
+        if (this.assets && this.assets.has('tile_gate')) {
+            // Barrier is baked vertical (blocks E/W); turn it a quarter for N/S track.
+            const rot = horizontal ? 0 : Math.PI / 2;
+            ctx.save();
+            ctx.globalAlpha = open ? 0.3 : 1; // open = barrier lifted away
+            this.assets.drawRecolored(ctx, 'tile_gate', cx, cy, size * 0.96, size * 0.96, col, rot);
+            ctx.restore();
+            return;
+        }
         ctx.save();
         ctx.translate(cx, cy);
         if (horizontal)
