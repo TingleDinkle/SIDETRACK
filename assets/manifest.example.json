@@ -1,0 +1,32 @@
+{
+  "_comment": "Copy this to manifest.json and point entries at your PNGs. Any sprite you omit falls back to the built-in procedural art. Entries are either an atlas region {x,y,w,h} (needs the shared \"atlas\" image) or a standalone file {src}. anchorX/anchorY default to 0.5 (centre); use anchorY:1 for things that stand on the ground (trees).",
+
+  "atlas": "atlas.png",
+
+  "sprites": {
+    "ground_w1": { "src": "ground/yard.png" },
+    "ground_w2": { "src": "ground/desert.png" },
+    "ground_w3": { "src": "ground/beach.png" },
+    "ground_w4": { "src": "ground/night.png" },
+    "ground":    { "src": "ground/default.png" },
+
+    "loco":  { "x": 0,   "y": 0, "w": 128, "h": 128 },
+    "wagon": { "x": 128, "y": 0, "w": 128, "h": 128 },
+    "mover": { "x": 256, "y": 0, "w": 128, "h": 128 },
+
+    "tile_rock":         { "src": "tiles/rock.png" },
+    "tile_tunnel":       { "src": "tiles/tunnel.png" },
+    "tile_exit":         { "src": "tiles/exit.png" },
+    "tile_start":        { "src": "tiles/start.png" },
+    "tile_button":       { "src": "tiles/button.png" },
+    "tile_switch":       { "src": "tiles/switch.png" },
+    "tile_gate_open":    { "src": "tiles/gate_open.png" },
+    "tile_gate_closed":  { "src": "tiles/gate_closed.png" },
+    "tile_signal_green": { "src": "tiles/signal_green.png" },
+    "tile_signal_red":   { "src": "tiles/signal_red.png" },
+
+    "prop_tree": { "src": "props/tree.png", "anchorY": 1 },
+    "prop_rock": { "src": "props/rock.png", "anchorY": 1 },
+    "prop_bush": { "src": "props/bush.png", "anchorY": 1 }
+  }
+}

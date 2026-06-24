@@ -70,6 +70,7 @@ export class Game {
         this.sim = null;
         this.state = 'editing';
         this.acc = 0;
+        this.renderer.setTheme(typeof level.world === 'number' ? level.world : 1);
     }
     loadLevel(level) {
         const i = this.levels.indexOf(level);
@@ -129,6 +130,9 @@ export class Game {
         // Lerp between ticks, but snap across teleports (a jump of >1 cell).
         const pos = (px, py, x, y) => Math.abs(x - px) + Math.abs(y - py) > 1.5 ? { x, y } : { x: lerp(px, x, frac), y: lerp(py, y, frac) };
         const out = [];
+        // Cosmetic scenery (only drawn when matching sprites are loaded).
+        for (const d of this.level.decor ?? [])
+            out.push({ kind: 'decor', x: d.x, y: d.y, heading: 'N', sprite: d.sprite, scale: d.scale });
         if (this.sim) {
             const s = this.sim;
             for (const w of s.free)

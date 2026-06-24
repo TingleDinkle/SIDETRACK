@@ -9,6 +9,7 @@ import { loadBundle } from './levelLoader.js';
 import { Progress } from './progress.js';
 import { AudioManager } from './sound.js';
 import { LevelEditor } from './leveleditor.js';
+import { AssetManager } from './assets.js';
 function el(id) {
     const node = document.getElementById(id);
     if (!node)
@@ -16,10 +17,14 @@ function el(id) {
     return node;
 }
 async function boot() {
-    const bundle = await loadBundle();
-    const progress = new Progress();
     const canvas = el('board');
     const renderer = new Renderer(canvas);
+    // Optional sprite layer — loads in parallel with the level bundle; the game
+    // renders procedurally until (and unless) assets/manifest.json supplies art.
+    const assets = new AssetManager();
+    renderer.setAssets(assets);
+    const [bundle] = await Promise.all([loadBundle(), assets.load()]);
+    const progress = new Progress();
     const hud = {
         levelName: el('level-name'),
         budgetUsed: el('budget-used'),
@@ -151,6 +156,54 @@ async function boot() {
     el('ed-copy').addEventListener('click', () => void editor.copyJSON());
     el('ed-import').addEventListener('click', () => editor.importJSON());
     el('ed-clear').addEventListener('click', () => editor.clear());
+    /* ----------------------------- booster bar (below the board) ----------------------------- */
+    // Scaffold UI placed right under the gameplay grid, built from the tinted
+    // icons. No effect wired yet — each click just toasts; hook real behaviour
+    // (reverse loco, drop a track, hold a signal…) where marked.
+    const boosters = [
+        { icon: 'icon_loco', color: '#3f7fd2', name: 'Reverse', count: 2 },
+        { icon: 'icon_rail', color: '#4fae5a', name: '+Track', count: 3 },
+        { icon: 'icon_signal_stop', color: '#d2553f', name: 'Hold', count: 1 },
+        { icon: 'icon_signal_go', color: '#d9a82e', name: 'Boost', count: 2 },
+    ];
+    const boostersEl = el('boosters');
+    const idpr = Math.min(2, window.devicePixelRatio || 1);
+    for (const b of boosters) {
+        const btn = document.createElement('button');
+        btn.className = 'booster';
+        const count = document.createElement('span');
+        count.className = 'bcount';
+        count.textContent = '×' + b.count;
+        const cvs = document.createElement('canvas');
+        cvs.className = 'bicon';
+        cvs.width = Math.round(34 * idpr);
+        cvs.height = Math.round(34 * idpr);
+        const cx = cvs.getContext('2d');
+        if (cx) {
+            cx.scale(idpr, idpr);
+            if (!assets.drawIcon(cx, b.icon, 17, 17, 30, 30, b.color)) {
+                cx.fillStyle = b.color; // fallback dot if icons aren't loaded
+                cx.beginPath();
+                cx.arc(17, 17, 12, 0, Math.PI * 2);
+                cx.fill();
+            }
+        }
+        const label = document.createElement('span');
+        label.className = 'blabel';
+        label.textContent = b.name;
+        btn.append(count, cvs, label);
+        let n = b.count;
+        btn.addEventListener('click', () => {
+            if (n <= 0)
+                return;
+            n--;
+            count.textContent = '×' + n;
+            if (n === 0)
+                btn.disabled = true;
+            game.toast(`${b.name} — hook an effect here`); // TODO: wire booster behaviour
+        });
+        boostersEl.appendChild(btn);
+    }
     game.updateHud();
     showSelect(true); // open the menu on first load
 }

@@ -1,0 +1,13 @@
+{
+  "sprites": {
+    "loco":  { "src": "baked/loco_a.png" },
+    "wagon": { "src": "baked/wagon_container.png" },
+    "mover": { "src": "baked/mover_tram.png" },
+
+    "icon_loco":        { "src": "icons/steam-locomotive.png" },
+    "icon_wagon":       { "src": "icons/mine-wagon.png" },
+    "icon_rail":        { "src": "icons/rail-road.png" },
+    "icon_signal_go":   { "src": "icons/traffic-lights-green.png" },
+    "icon_signal_stop": { "src": "icons/traffic-lights-red.png" }
+  }
+}

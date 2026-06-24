@@ -37,6 +37,16 @@ export interface LevelMover {
   type?: string;
 }
 
+/** Purely cosmetic scenery (trees, rocks, bushes). Drawn only if a matching
+ *  sprite is loaded; ignored entirely in procedural mode. Coords may be
+ *  fractional and sit anywhere, including the board margin (negative / > grid). */
+export interface DecorItem {
+  x: number;
+  y: number;
+  sprite: string;
+  scale?: number;
+}
+
 export interface Level {
   id: string;
   world: number | string;
@@ -47,6 +57,7 @@ export interface Level {
   locomotive: { x: number; y: number; heading: Heading };
   wagons?: LevelWagon[];
   movers?: LevelMover[];
+  decor?: DecorItem[];
   objectives?: { couple?: string; passengers?: number };
 }
 

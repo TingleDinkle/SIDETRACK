@@ -14,15 +14,19 @@
 import { Grid } from './grid.js';
 import { Cell, Heading, edgeList } from './types.js';
 import { classify } from './track.js';
+import { AssetManager } from './assets.js';
 
 /** A drawable unit. `x`/`y` may be fractional so the Game can interpolate
- *  positions between simulation ticks for smooth motion. */
+ *  positions between simulation ticks for smooth motion. `decor` is cosmetic
+ *  scenery drawn from a named sprite (anchored at its base). */
 export interface DrawEntity {
-  kind: 'loco' | 'wagon' | 'mover';
+  kind: 'loco' | 'wagon' | 'mover' | 'decor';
   x: number;
   y: number;
   heading: Heading;
   number?: number;
+  sprite?: string;
+  scale?: number;
 }
 
 /** Live tile state during a run (gates open, signals green, junction branch).
@@ -100,12 +104,35 @@ export class Renderer {
   private dpr = 1;
   private particles: Particle[] = [];
   private lastDrawMs = 0;
+  private assets: AssetManager | null = null;
+  private theme = 1; // world number, selects ground_w{theme}
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas context unavailable');
     this.ctx = ctx;
+  }
+
+  /** Optional sprite layer; when set, the renderer prefers sprites over shapes. */
+  setAssets(assets: AssetManager | null): void {
+    this.assets = assets;
+  }
+  /** Selects per-world ground/theming. */
+  setTheme(world: number): void {
+    this.theme = world || 1;
+  }
+
+  /** Draw a tinted UI/booster icon (a mono symbol recoloured to `color`),
+   *  centred at (cx,cy) in CSS pixels. No-op if the icon isn't loaded. */
+  icon(name: string, cx: number, cy: number, size: number, color = '#ffffff'): boolean {
+    return this.assets?.drawIcon(this.ctx, name, cx, cy, size, size, color) ?? false;
+  }
+  private groundSprite(): string | null {
+    if (!this.assets) return null;
+    const w = `ground_w${this.theme}`;
+    if (this.assets.has(w)) return w;
+    return this.assets.has('ground') ? 'ground' : null;
   }
 
   /** Recompute backing-store size and the centred board layout. */
@@ -162,6 +189,9 @@ export class Renderer {
 
     this.drawBoard(grid);
 
+    // Cosmetic scenery behind the gameplay.
+    for (const e of entities) if (e.kind === 'decor') this.drawEntity(e);
+
     // Track (any cell with a mask: player track, fixed track, start/exit stubs)
     for (const c of grid.cells) if (c.mask !== 0) this.drawTrack(c, grid, dyn);
 
@@ -169,10 +199,23 @@ export class Renderer {
     for (const c of grid.cells) this.drawTileMarker(c, grid, dyn);
 
     // Entities — drawn back-to-front so the loco sits on top of its wagons.
-    for (const e of entities) if (e.kind !== 'loco') this.drawEntity(e);
+    for (const e of entities) if (e.kind === 'wagon' || e.kind === 'mover') this.drawEntity(e);
     for (const e of entities) if (e.kind === 'loco') this.drawEntity(e);
 
     this.drawParticles(tMs);
+    this.drawVignette();
+  }
+
+  /** Soft darkening toward the edges for depth (works with or without art). */
+  private drawVignette(): void {
+    const ctx = this.ctx;
+    const { cssW, cssH } = this.layout;
+    const r = Math.hypot(cssW, cssH) / 2;
+    const g = ctx.createRadialGradient(cssW / 2, cssH / 2, r * 0.62, cssW / 2, cssH / 2, r);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(40,28,12,0.18)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, cssW, cssH);
   }
 
   /* ----------------------------- particles ----------------------------- */
@@ -249,32 +292,70 @@ export class Renderer {
       case 'mover':
         this.drawMover(e.x, e.y, e.heading);
         break;
+      case 'decor':
+        this.drawDecor(e);
+        break;
     }
+  }
+
+  /** Cosmetic scenery sprite, anchored near its base on the ground. */
+  private drawDecor(e: DrawEntity): void {
+    if (!this.assets || !e.sprite || !this.assets.has(e.sprite)) return;
+    const { ox, oy, cell } = this.layout;
+    const s = cell * (e.scale ?? 1);
+    this.assets.draw(this.ctx, e.sprite, ox + (e.x + 0.5) * cell, oy + (e.y + 0.92) * cell, s, s);
+  }
+
+  /** Soft contact shadow under an entity for depth. */
+  private contactShadow(cx: number, cy: number, w: number): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = 'rgba(40,28,12,0.18)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + w * 0.34, w * 0.42, w * 0.18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   private drawBoard(grid: Grid): void {
     const ctx = this.ctx;
-    for (let y = 0; y < grid.rows; y++) {
-      for (let x = 0; x < grid.cols; x++) {
-        const { left, top, size } = this.cellRect(x, y);
-        ctx.fillStyle = (x + y) % 2 === 0 ? PAL.boardLight : PAL.boardDark;
-        ctx.fillRect(left, top, size, size);
+    const { ox, oy, cell, cols, rows } = this.layout;
+    const boardW = cols * cell;
+    const boardH = rows * cell;
+
+    const ground = this.groundSprite();
+    const pat = ground && this.assets ? this.assets.pattern(ctx, ground) : null;
+    if (pat) {
+      ctx.save();
+      ctx.fillStyle = pat;
+      ctx.translate(ox, oy);
+      ctx.fillRect(0, 0, boardW, boardH);
+      ctx.restore();
+    } else {
+      for (let y = 0; y < grid.rows; y++) {
+        for (let x = 0; x < grid.cols; x++) {
+          const { left, top, size } = this.cellRect(x, y);
+          ctx.fillStyle = (x + y) % 2 === 0 ? PAL.boardLight : PAL.boardDark;
+          ctx.fillRect(left, top, size, size);
+        }
       }
     }
-    // Grid lines + outer edge
-    const { ox, oy, cell, cols, rows } = this.layout;
-    ctx.strokeStyle = PAL.grid;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let x = 0; x <= cols; x++) {
-      ctx.moveTo(ox + x * cell + 0.5, oy);
-      ctx.lineTo(ox + x * cell + 0.5, oy + rows * cell);
+
+    // Grid lines (skipped when a ground texture is supplied) + outer edge.
+    if (!pat) {
+      ctx.strokeStyle = PAL.grid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = 0; x <= cols; x++) {
+        ctx.moveTo(ox + x * cell + 0.5, oy);
+        ctx.lineTo(ox + x * cell + 0.5, oy + rows * cell);
+      }
+      for (let y = 0; y <= rows; y++) {
+        ctx.moveTo(ox, oy + y * cell + 0.5);
+        ctx.lineTo(ox + cols * cell, oy + y * cell + 0.5);
+      }
+      ctx.stroke();
     }
-    for (let y = 0; y <= rows; y++) {
-      ctx.moveTo(ox, oy + y * cell + 0.5);
-      ctx.lineTo(ox + cols * cell, oy + y * cell + 0.5);
-    }
-    ctx.stroke();
     ctx.strokeStyle = PAL.boardEdge;
     ctx.lineWidth = 2;
     ctx.strokeRect(ox, oy, cols * cell, rows * cell);
@@ -457,6 +538,18 @@ export class Renderer {
   /* ----------------------------- tiles ----------------------------- */
 
   private drawTileMarker(c: Cell, grid: Grid, dyn: DynamicState | null): void {
+    // Prefer a sprite when one is loaded; otherwise fall through to shapes.
+    if (this.assets) {
+      const sp = this.tileSpriteFor(c, grid, dyn);
+      if (sp && this.assets.has(sp.name)) {
+        const { left, top, size } = this.cellRect(c.x, c.y);
+        const cx = left + size / 2;
+        const cy = top + size / 2;
+        if (sp.shadow) this.contactShadow(cx, cy, size);
+        this.assets.draw(this.ctx, sp.name, cx, cy, size * 0.94, size * 0.94, sp.rot);
+        return;
+      }
+    }
     switch (c.type) {
       case 'rock': this.drawRock(c.x, c.y); break;
       case 'exit': this.drawExit(c.x, c.y); break;
@@ -475,6 +568,32 @@ export class Renderer {
         break;
       }
       default: break;
+    }
+  }
+
+  /** Sprite name + rotation + shadow flag for a fixed tile (null if none). */
+  private tileSpriteFor(c: Cell, grid: Grid, dyn: DynamicState | null): { name: string; rot: number; shadow: boolean } | null {
+    const horizontal = (c.mask & 2 || c.mask & 8) !== 0;
+    switch (c.type) {
+      case 'rock': return { name: 'tile_rock', rot: 0, shadow: true };
+      case 'exit': return { name: 'tile_exit', rot: 0, shadow: false };
+      case 'start': return { name: 'tile_start', rot: 0, shadow: false };
+      case 'button': return { name: 'tile_button', rot: 0, shadow: false };
+      case 'switch': return { name: 'tile_switch', rot: 0, shadow: false };
+      case 'tunnel': {
+        const mouth = edgeList(c.mask)[0] ?? 'E';
+        return { name: 'tile_tunnel', rot: this.headingAngle(mouth), shadow: true };
+      }
+      case 'gate': {
+        const open = dyn ? dyn.gateOpen(c.color ?? '') : c.open ?? false;
+        return { name: open ? 'tile_gate_open' : 'tile_gate_closed', rot: horizontal ? 0 : Math.PI / 2, shadow: false };
+      }
+      case 'signal': {
+        const open = dyn ? dyn.signalOpen(grid.idx(c.x, c.y)) : c.open ?? true;
+        return { name: open ? 'tile_signal_green' : 'tile_signal_red', rot: 0, shadow: false };
+      }
+      default:
+        return null;
     }
   }
 
@@ -667,6 +786,11 @@ export class Renderer {
     const { left, top, size } = this.cellRect(x, y);
     const cx = left + size / 2;
     const cy = top + size / 2;
+    this.contactShadow(cx, cy, size);
+    if (this.assets?.has('loco')) {
+      this.assets.draw(ctx, 'loco', cx, cy, size * 0.92, size * 0.92, this.headingAngle(h));
+      return;
+    }
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(this.headingAngle(h));
@@ -702,6 +826,19 @@ export class Renderer {
     const cx = left + size / 2;
     const cy = top + size / 2;
     const w = size * 0.66;
+    this.contactShadow(cx, cy, size);
+    // A single wagon sprite serves every number — the digit is drawn on top.
+    if (this.assets?.has('wagon')) {
+      this.assets.draw(ctx, 'wagon', cx, cy, size * 0.86, size * 0.86, 0);
+      ctx.save();
+      ctx.fillStyle = PAL.ink;
+      ctx.font = `800 ${Math.round(size * 0.36)}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(num), cx, cy + size * 0.02);
+      ctx.restore();
+      return;
+    }
     ctx.save();
     ctx.fillStyle = PAL.wagonDark;
     this.roundRect(cx - w / 2, cy - w / 2 + size * 0.04, w, w, size * 0.12);
@@ -722,6 +859,11 @@ export class Renderer {
     const { left, top, size } = this.cellRect(x, y);
     const cx = left + size / 2;
     const cy = top + size / 2;
+    this.contactShadow(cx, cy, size);
+    if (this.assets?.has('mover')) {
+      this.assets.draw(ctx, 'mover', cx, cy, size * 0.78, size * 0.78, this.headingAngle(h));
+      return;
+    }
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(this.headingAngle(h));

@@ -82,6 +82,7 @@ src/   (pure model — no DOM, unit-tested in Node)
   editor.ts      Drag-lay, tap-erase, budget accounting, snapshot undo/redo.
   sim.ts         The deterministic tick simulation (trail-following train + all mechanics).
        (browser layer)
+  assets.ts      Optional sprite/atlas loader; renderer falls back to shapes when absent.
   render.ts      Canvas renderer + particles. Owns the screen<->grid layout.
   input.ts       Pointer Events (mouse/touch/pen) -> one gesture = one undo stroke.
   sound.ts       Procedural WebAudio sfx (no audio files).
@@ -125,6 +126,16 @@ Laying onto an empty cell spends 1; extending an existing track cell
 rocks, pre-laid track) are never edited — the player connects up against them.
 
 ---
+
+## Art assets (optional)
+
+The game draws everything procedurally — no art files required. To skin it, drop
+PNGs into `assets/` and list them in `assets/manifest.json`; the renderer uses a
+sprite when one exists and falls back to the shape otherwise, **per piece**. The
+ground, locomotive, wagons, tiles, and per-level scenery (`decor`) are all
+overridable. See [`assets/README.md`](assets/README.md) for the sprite names,
+sizes, anchors and the (atlas-region *or* loose-file) manifest format. Depth cues
+(contact shadows, edge vignette, textured ground) apply with or without art.
 
 ## Roadmap
 
