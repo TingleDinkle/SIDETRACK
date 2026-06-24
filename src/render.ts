@@ -12,7 +12,7 @@
  */
 
 import { Grid } from './grid.js';
-import { Cell, EdgeBit, Heading, edgeList } from './types.js';
+import { Cell, EdgeBit, Heading, OPPOSITE, addEdge, edgeList, hasEdge } from './types.js';
 import { classify } from './track.js';
 import { AssetManager } from './assets.js';
 
@@ -406,23 +406,37 @@ export class Renderer {
     return { x: right ? left + size : left, y: bottom ? top + size : top };
   }
 
+  /** Edges of a start/exit cell whose neighbour actually connects back (so the
+   *  stub rail only appears once the player has laid track up against it). */
+  private connectedStubMask(c: Cell, grid: Grid): number {
+    let m = 0;
+    for (const h of edgeList(c.mask)) {
+      const nb = grid.neighbor(c.x, c.y, h);
+      if (nb && hasEdge(nb.mask, OPPOSITE[h])) m = addEdge(m, h);
+    }
+    return m;
+  }
+
   private drawTrack(c: Cell, grid: Grid, dyn: DynamicState | null): void {
     const { left, top, size } = this.cellRect(c.x, c.y);
     const cx = left + size / 2;
     const cy = top + size / 2;
-    const edges = edgeList(c.mask);
-    const shape = classify(c.mask);
+    // For start/exit, only show a rail toward neighbours that actually connect
+    // back — so there's no pre-placed stub until the player's track reaches them.
+    const mask = c.type === 'start' || c.type === 'exit' ? this.connectedStubMask(c, grid) : c.mask;
+    if (mask === 0) return;
+    const edges = edgeList(mask);
+    const shape = classify(mask);
 
-    // Baked 3D track sprites for the common shapes; junction/crossing/stub keep
-    // the procedural rails (the pack has no T / cross / switch piece).
+    // Optional baked track sprites for the common shapes (off by default).
     if (this.assets) {
       if (shape === 'straight' && this.assets.has('track_straight')) {
-        const vertical = (c.mask & EdgeBit.N) !== 0; // N|S
+        const vertical = (mask & EdgeBit.N) !== 0; // N|S
         this.assets.draw(this.ctx, 'track_straight', cx, cy, size, size, vertical ? Math.PI / 2 : 0);
         return;
       }
       if (shape === 'curve' && this.assets.has('track_curve')) {
-        this.assets.draw(this.ctx, 'track_curve', cx, cy, size, size, this.curveRot(c.mask));
+        this.assets.draw(this.ctx, 'track_curve', cx, cy, size, size, this.curveRot(mask));
         return;
       }
     }
@@ -445,7 +459,7 @@ export class Renderer {
       }
       case 'junction': {
         // Straight bar across the opposite pair + a spoke to the branch.
-        const hasNS = c.mask & 1 && c.mask & 4;
+        const hasNS = mask & 1 && mask & 4;
         const barA: Heading = hasNS ? 'N' : 'E';
         const barB: Heading = hasNS ? 'S' : 'W';
         const branch = edges.find((e) => e !== barA && e !== barB)!;
