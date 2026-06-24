@@ -1,0 +1,4 @@
+node_modules/
+*.log
+# Local headless smoke-test scaffolding (not part of the game)
+__*.html

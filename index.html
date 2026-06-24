@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Sidetrack</title>
+    <style>
+      :root {
+        --bg: #efe4cd;
+        --panel: #f7efe0;
+        --panel-edge: #d9c7a3;
+        --ink: #463a28;
+        --ink-soft: #7c6c52;
+        --accent: #5b8c6a;
+        --accent-press: #4a7558;
+        --danger: #c95f52;
+        --shadow: 0 2px 0 rgba(120, 96, 56, 0.35);
+      }
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
+      }
+      #app {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        max-width: 760px;
+        margin: 0 auto;
+      }
+      header,
+      footer {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        padding-top: calc(10px + env(safe-area-inset-top));
+      }
+      footer {
+        padding-bottom: calc(10px + env(safe-area-inset-bottom));
+        flex-wrap: wrap;
+      }
+      #level-name {
+        font-weight: 700;
+        font-size: 16px;
+        letter-spacing: 0.2px;
+      }
+      .spacer {
+        flex: 1 1 auto;
+      }
+      .budget {
+        font-size: 14px;
+        font-weight: 600;
+        background: var(--panel);
+        border: 2px solid var(--panel-edge);
+        border-radius: 10px;
+        padding: 6px 12px;
+        box-shadow: var(--shadow);
+      }
+      .budget b {
+        font-size: 17px;
+      }
+      .budget.over {
+        color: var(--danger);
+        border-color: var(--danger);
+      }
+      #stage {
+        flex: 1 1 auto;
+        position: relative;
+        min-height: 0;
+      }
+      #board {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+      button,
+      select {
+        font-family: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--ink);
+        background: var(--panel);
+        border: 2px solid var(--panel-edge);
+        border-radius: 12px;
+        padding: 10px 14px;
+        min-height: 44px;
+        box-shadow: var(--shadow);
+        cursor: pointer;
+        transition: transform 0.05s ease, background 0.1s ease;
+      }
+      button:active {
+        transform: translateY(2px);
+        box-shadow: none;
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: default;
+        box-shadow: none;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent-press);
+        color: #fff;
+      }
+      button.icon {
+        min-width: 44px;
+        padding: 10px;
+        font-size: 18px;
+      }
+      #level-select {
+        margin-left: auto;
+      }
+      #toast {
+        position: absolute;
+        left: 50%;
+        bottom: 16px;
+        transform: translate(-50%, 16px);
+        background: rgba(50, 40, 26, 0.92);
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 9px 16px;
+        border-radius: 999px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+      }
+      #toast.show {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--ink-soft);
+        padding: 0 12px 8px;
+        text-align: center;
+      }
+      /* Outcome overlay */
+      #outcome {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(40, 32, 20, 0.45);
+        backdrop-filter: blur(2px);
+      }
+      #outcome.show {
+        display: flex;
+      }
+      #outcome .card {
+        background: var(--panel);
+        border: 3px solid var(--panel-edge);
+        border-radius: 18px;
+        padding: 22px 26px;
+        text-align: center;
+        box-shadow: 0 8px 0 rgba(120, 96, 56, 0.3);
+        min-width: 240px;
+      }
+      #outcome.win .card {
+        border-color: var(--accent);
+      }
+      #outcome.lose .card {
+        border-color: var(--danger);
+      }
+      #outcome-title {
+        font-size: 26px;
+        font-weight: 800;
+        margin: 0 0 4px;
+      }
+      #outcome.win #outcome-title {
+        color: var(--accent-press);
+      }
+      #outcome.lose #outcome-title {
+        color: var(--danger);
+      }
+      #outcome-sub {
+        color: var(--ink-soft);
+        font-size: 14px;
+        margin-bottom: 16px;
+        text-transform: capitalize;
+      }
+      #outcome .row {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+      }
+      /* Level select */
+      #levelselect {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: var(--bg);
+        overflow-y: auto;
+        display: none;
+        flex-direction: column;
+      }
+      #levelselect.show {
+        display: flex;
+      }
+      .ls-head {
+        position: sticky;
+        top: 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        padding-top: calc(14px + env(safe-area-inset-top));
+        background: var(--bg);
+        border-bottom: 2px solid var(--panel-edge);
+      }
+      .ls-head h1 {
+        margin: 0;
+        font-size: 22px;
+        letter-spacing: 0.3px;
+      }
+      .ls-progress {
+        flex: 1;
+        color: var(--ink-soft);
+        font-size: 14px;
+        font-weight: 600;
+      }
+      #ls-worlds {
+        max-width: 760px;
+        width: 100%;
+        margin: 0 auto;
+        padding: 8px 16px 40px;
+      }
+      .ls-world {
+        margin-top: 18px;
+      }
+      .ls-world h2 {
+        margin: 0 0 2px;
+        font-size: 17px;
+      }
+      .ls-world p {
+        margin: 0 0 10px;
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+      .ls-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+        gap: 10px;
+      }
+      .ls-cell {
+        position: relative;
+        background: var(--panel);
+        border: 2px solid var(--panel-edge);
+        border-radius: 14px;
+        padding: 12px 10px;
+        text-align: left;
+        box-shadow: var(--shadow);
+        cursor: pointer;
+        min-height: 64px;
+      }
+      .ls-cell:active {
+        transform: translateY(2px);
+        box-shadow: none;
+      }
+      .ls-cell.done {
+        border-color: var(--accent);
+      }
+      .ls-cell .num {
+        font-size: 18px;
+        font-weight: 800;
+      }
+      .ls-cell .nm {
+        display: block;
+        font-size: 12px;
+        color: var(--ink-soft);
+        margin-top: 2px;
+      }
+      .ls-cell .tick {
+        position: absolute;
+        top: 8px;
+        right: 10px;
+        color: var(--accent);
+        font-weight: 800;
+      }
+      .ls-cell .best {
+        display: block;
+        font-size: 11px;
+        color: var(--accent-press);
+        margin-top: 4px;
+        font-weight: 700;
+      }
+      /* Level editor */
+      #editor {
+        position: fixed;
+        inset: 0;
+        z-index: 25;
+        background: var(--bg);
+        display: none;
+        flex-direction: column;
+        padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+        gap: 8px;
+        overflow-y: auto;
+      }
+      #editor.show {
+        display: flex;
+      }
+      #editor .ed-top,
+      #editor .ed-tools,
+      #editor .ed-opts,
+      #editor .ed-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+      #editor label {
+        font-size: 13px;
+        color: var(--ink-soft);
+        font-weight: 600;
+      }
+      #editor input[type='number'] {
+        width: 58px;
+        font-size: 14px;
+        padding: 6px 8px;
+        min-height: 0;
+      }
+      #editor select {
+        padding: 6px 8px;
+        min-height: 0;
+        font-size: 13px;
+      }
+      #editor button {
+        padding: 8px 12px;
+        min-height: 38px;
+        font-size: 14px;
+        border-radius: 10px;
+      }
+      .ed-status {
+        font-size: 13px;
+        color: var(--accent-press);
+        font-weight: 600;
+        margin-left: auto;
+      }
+      .ed-tools button.sel {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent-press);
+      }
+      .ed-stage {
+        flex: 1 1 auto;
+        min-height: 240px;
+        background: var(--panel);
+        border: 2px solid var(--panel-edge);
+        border-radius: 12px;
+        touch-action: none;
+      }
+      #ed-board {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+      #ed-json {
+        width: 100%;
+        height: 110px;
+        resize: vertical;
+        font: 12px ui-monospace, Menlo, Consolas, monospace;
+        border: 2px solid var(--panel-edge);
+        border-radius: 10px;
+        padding: 8px;
+        background: var(--panel);
+        color: var(--ink);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <button class="icon" id="btn-levels" title="Level select">☰</button>
+        <span id="level-name">Sidetrack</span>
+        <span class="spacer"></span>
+        <button class="icon" id="btn-mute" title="Sound on/off">🔊</button>
+        <span class="budget" id="budget">Track <b id="budget-used">0</b>/<span id="budget-total">0</span></span>
+      </header>
+
+      <main id="stage">
+        <canvas id="board"></canvas>
+        <div id="toast"></div>
+        <div id="outcome">
+          <div class="card">
+            <p id="outcome-title">Solved!</p>
+            <p id="outcome-sub">Nice routing</p>
+            <div class="row">
+              <button id="outcome-edit">Edit</button>
+              <button id="outcome-replay">Replay</button>
+              <button class="primary" id="outcome-next">Next ▶</button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <div class="hint">Drag across cells to lay track · tap a track to erase · press Play to run</div>
+
+      <footer>
+        <button class="icon" id="btn-undo" title="Undo" disabled>↶</button>
+        <button class="icon" id="btn-redo" title="Redo" disabled>↷</button>
+        <button id="btn-reset">Reset</button>
+        <button class="primary" id="btn-play">▶ Play</button>
+        <button id="btn-step">Step</button>
+        <button id="btn-speed">1×</button>
+      </footer>
+    </div>
+
+    <!-- Level select -->
+    <div id="levelselect">
+      <div class="ls-head">
+        <h1>Sidetrack</h1>
+        <span class="ls-progress" id="ls-progress"></span>
+        <button id="ls-editor">✎ Editor</button>
+        <button class="primary" id="ls-close">Close</button>
+      </div>
+      <div id="ls-worlds"></div>
+    </div>
+
+    <!-- Level editor (M6) -->
+    <div id="editor">
+      <div class="ed-top">
+        <button class="primary" id="ed-done">Done</button>
+        <strong>Level Editor</strong>
+        <label>cols <input id="ed-cols" type="number" min="2" max="16" /></label>
+        <label>rows <input id="ed-rows" type="number" min="2" max="12" /></label>
+        <label>budget <input id="ed-budget" type="number" min="0" /></label>
+        <span class="ed-status" id="ed-status"></span>
+      </div>
+      <div class="ed-tools" id="ed-tools"></div>
+      <div class="ed-opts">
+        <label>facing
+          <select id="ed-heading"><option>E</option><option>S</option><option>W</option><option>N</option></select>
+        </label>
+        <label>track
+          <select id="ed-orient"><option value="H">↔ horizontal</option><option value="V">↕ vertical</option></select>
+        </label>
+        <label>color
+          <select id="ed-color"><option>red</option><option>blue</option><option>green</option><option>yellow</option></select>
+        </label>
+      </div>
+      <div class="ed-stage"><canvas id="ed-board"></canvas></div>
+      <div class="ed-actions">
+        <button class="primary" id="ed-test">▶ Test play</button>
+        <button id="ed-export">Export</button>
+        <button id="ed-copy">Copy</button>
+        <button id="ed-import">Import</button>
+        <button id="ed-clear">Clear</button>
+      </div>
+      <textarea id="ed-json" spellcheck="false" placeholder="Level JSON appears here — and paste your own, then Import."></textarea>
+    </div>
+
+    <script type="module" src="./dist/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Sidetrack — auto demo</title>
+    <style>
+      html,body{margin:0;height:100%;overflow:hidden;background:#efe4cd;color:#463a28;font-family:system-ui,sans-serif}
+      #stage{position:absolute;inset:0}
+      #board{display:block;width:100%;height:100%}
+      #title{position:absolute;top:14px;left:0;right:0;text-align:center;font-weight:800;font-size:20px;
+        text-shadow:0 1px 0 #fff8;pointer-events:none}
+      #hint{position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:13px;color:#7c6c52}
+      .hidden{position:absolute;left:-9999px;top:-9999px}
+    </style>
+  </head>
+  <body>
+    <main id="stage"><canvas id="board"></canvas><div id="toast" class="hidden"></div>
+      <div id="title">Sidetrack</div>
+      <div id="hint">auto-demo · open <b>index.html</b> to play it yourself</div>
+      <div id="outcome" class="hidden"><div class="card"><p id="outcome-title"></p><p id="outcome-sub"></p>
+        <div class="row"><button id="outcome-edit"></button><button id="outcome-replay"></button><button id="outcome-next"></button></div></div></div>
+    </main>
+    <div class="hidden">
+      <span id="level-name"></span><span id="budget"><b id="budget-used"></b><span id="budget-total"></span></span>
+      <button id="btn-undo"></button><button id="btn-redo"></button><button id="btn-play"></button>
+      <button id="btn-step"></button><button id="btn-speed"></button>
+    </div>
+    <script type="module">
+      import { Game } from './dist/game.js';
+      import { Renderer } from './dist/render.js';
+      import { AudioManager } from './dist/sound.js';
+      import { LEVEL_LIBRARY } from './dist/levelData.js';
+
+      const $ = (id) => document.getElementById(id);
+      const hud = {
+        levelName: $('level-name'), budgetUsed: $('budget-used'), budgetTotal: $('budget-total'), budgetBox: $('budget'),
+        toast: $('toast'), btnUndo: $('btn-undo'), btnRedo: $('btn-redo'), btnPlay: $('btn-play'), btnStep: $('btn-step'), btnSpeed: $('btn-speed'),
+        outcome: { panel: $('outcome'), title: $('outcome-title'), sub: $('outcome-sub'),
+          btnReplay: $('outcome-replay'), btnNext: $('outcome-next'), btnEdit: $('outcome-edit') },
+      };
+      const audio = new AudioManager();
+      const game = new Game($('board'), new Renderer($('board')), hud, audio, LEVEL_LIBRARY, 0);
+      game.setMuted(true); // browsers block autoplay audio anyway
+
+      // Showcase levels with a known-good track path (start -> exit, one step per cell).
+      const showcase = [
+        { id: '1-4', segs: [[0,1,1,1],[1,1,2,1],[2,1,3,1],[3,1,4,1],[4,1,5,1],[5,1,6,1]] },
+        { id: '1-2', segs: [[0,1,1,1],[1,1,1,2],[1,2,2,2],[2,2,3,2],[3,2,4,2],[4,2,4,1],[4,1,5,1]] },
+        { id: '2-1', segs: [[0,1,1,1],[1,1,2,1],[2,1,3,1]] },
+        { id: '3-1', segs: [[0,1,1,1],[1,1,2,1],[2,1,3,1],[3,1,4,1],[4,1,5,1],[5,1,6,1]] },
+      ];
+
+      let idx = 0;
+      const playNext = () => {
+        const sc = showcase[idx % showcase.length];
+        const lvl = LEVEL_LIBRARY.find((l) => l.id === sc.id);
+        game.loadLevel(lvl);
+        $('title').textContent = `${lvl.id} · ${lvl.name}`;
+        const ed = game.editor;
+        ed.beginStroke();
+        for (const s of sc.segs) ed.layStep(s[0], s[1], s[2], s[3]);
+        ed.endStroke();
+        setTimeout(() => game.play(), 800); // show the laid route briefly, then run
+        const iv = setInterval(() => {
+          if (game.state === 'won' || game.state === 'lost') {
+            clearInterval(iv);
+            idx++;
+            setTimeout(playNext, 1700);
+          }
+        }, 150);
+      };
+      playNext();
+    </script>
+  </body>
+</html>

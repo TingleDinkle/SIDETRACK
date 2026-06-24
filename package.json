@@ -1,0 +1,15 @@
+{
+  "name": "sidetrack",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sidetrack — a cozy deterministic train-shunting puzzle (original).",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node tools/genlevels.mjs",
+    "watch": "tsc -p tsconfig.json --watch",
+    "test": "node dist/selftest.js && node dist/leveltest.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
