@@ -136,6 +136,7 @@ export class LevelManager {
 
     this.canvas.addEventListener('pointerdown', this.onDown, { passive: false });
     this.canvas.addEventListener('pointermove', this.onMove, { passive: false });
+    this.canvas.addEventListener('lostpointercapture', this.onLost);
     window.addEventListener('pointerup', this.onUp);
     window.addEventListener('pointercancel', this.onCancel);
     window.addEventListener('keydown', this.onKey);
@@ -424,22 +425,46 @@ export class LevelManager {
 
   /* ----------------------------- painting ----------------------------- */
 
+  /** Clear the in-progress gesture flags (not the selection). */
+  private resetGesture(): void {
+    this.dragging = false;
+    this.painting = false;
+    this.last = null;
+    this.dragHover = null;
+    this.outside = false;
+  }
+
   private onDown = (e: PointerEvent): void => {
-    if (this.dragging || this.painting) return; // a gesture already owns the pointer
+    // Ignore extra pointers only while a real gesture still holds the pointer.
+    // If the active flag is stale (a prior up/cancel was missed) the capture is
+    // already gone, so we recover and start fresh instead of locking up.
+    if (this.activeId !== null && this.activeId !== e.pointerId) {
+      let held = false;
+      try {
+        held = this.canvas.hasPointerCapture(this.activeId);
+      } catch {
+        held = false;
+      }
+      if (held) return;
+    }
+    this.resetGesture();
     e.preventDefault();
     const cell = this.renderer.cellAt(e.clientX, e.clientY);
     if (!cell) return;
     this.activeId = e.pointerId;
-    this.outside = false;
+    try {
+      this.canvas.setPointerCapture(e.pointerId);
+    } catch {
+      /* unsupported / synthetic pointer */
+    }
+    this.hoverCell = null; // a gesture is starting; drop the hover highlight
     if (this.tool === 'select') {
       this.selection = this.pick(cell.x, cell.y);
       this.dragging = this.selection !== null;
-      this.dragHover = null;
       this.updateSelBar();
       this.draw();
       return;
     }
-    this.hoverCell = null; // a gesture is starting; drop the hover highlight
     this.painting = true;
     this.last = cell;
     if (this.tool !== 'track') this.placeAt(cell.x, cell.y);
@@ -491,9 +516,7 @@ export class LevelManager {
   private onUp = (e: PointerEvent): void => {
     if (this.activeId !== null && e.pointerId !== this.activeId) return;
     if (this.refs.panel.classList.contains('show') && this.tool === 'select' && this.dragging) {
-      this.dragging = false;
       const to = this.dragHover;
-      this.dragHover = null;
       const from = this.selectedPos();
       if (to && from && (to.x !== from.x || to.y !== from.y)) {
         if (this.canDropAt(to.x, to.y)) {
@@ -502,28 +525,36 @@ export class LevelManager {
           this.updateSelBar();
         } else {
           this.status('Can’t drop there.');
-          this.draw();
         }
-      } else {
-        this.draw();
       }
     }
-    this.dragging = false;
-    this.painting = false;
+    try {
+      this.canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    this.resetGesture();
     this.activeId = null;
-    this.outside = false;
+    this.draw();
   };
-  /** A touch/pen gesture was interrupted (scroll, palm, OS back-swipe): abandon it
-   *  cleanly — never commit a move — and clear the drag tint. */
+  /** A touch/pen gesture was interrupted (scroll, palm, OS back-swipe), or pointer
+   *  capture was lost: abandon it cleanly — never commit a move — and clear state. */
   private onCancel = (e: PointerEvent): void => {
     if (this.activeId !== null && e.pointerId !== this.activeId) return;
-    this.dragging = false;
-    this.painting = false;
-    this.last = null;
-    this.dragHover = null;
+    try {
+      this.canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    this.resetGesture();
     this.activeId = null;
-    this.outside = false;
     this.draw();
+  };
+  /** Backstop: whenever the canvas loses the captured pointer (up/cancel/loss),
+   *  guarantee a clean slate so a missed event can never leave the editor stuck. */
+  private onLost = (): void => {
+    this.resetGesture();
+    this.activeId = null;
   };
   private onKey = (e: KeyboardEvent): void => {
     if (!this.refs.panel.classList.contains('show')) return;
