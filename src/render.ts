@@ -199,11 +199,14 @@ export class Renderer {
     // Cosmetic scenery behind the gameplay.
     for (const e of entities) if (e.kind === 'decor') this.drawEntity(e);
 
+    // Flat floor markings (start/exit/button/switch) go UNDER the rails.
+    for (const c of grid.cells) this.drawTileMarker(c, grid, dyn, 'ground');
+
     // Track (any cell with a mask: player track, fixed track, start/exit stubs)
     for (const c of grid.cells) if (c.mask !== 0) this.drawTrack(c, grid, dyn);
 
-    // Tile markers on top of their stubs
-    for (const c of grid.cells) this.drawTileMarker(c, grid, dyn);
+    // 3-D objects (rock/tunnel/gate/signal) go OVER the rails.
+    for (const c of grid.cells) this.drawTileMarker(c, grid, dyn, 'object');
 
     // Entities — drawn back-to-front so the loco sits on top of its wagons.
     for (const e of entities) if (e.kind === 'coupler') this.drawEntity(e);
@@ -696,7 +699,15 @@ export class Renderer {
 
   /* ----------------------------- tiles ----------------------------- */
 
-  private drawTileMarker(c: Cell, grid: Grid, dyn: DynamicState | null): void {
+  /** Flat floor markings (start zone, exit target, button, switch) sit UNDER the
+   *  rails; 3-D objects (rock, tunnel, gate, signal) sit OVER them. The two layers
+   *  are drawn in separate passes around drawTrack. */
+  private isGroundMarker(c: Cell): boolean {
+    return c.type === 'start' || c.type === 'exit' || c.type === 'button' || c.type === 'switch';
+  }
+
+  private drawTileMarker(c: Cell, grid: Grid, dyn: DynamicState | null, layer: 'ground' | 'object'): void {
+    if (this.isGroundMarker(c) !== (layer === 'ground')) return;
     // Prefer a sprite when one is loaded; otherwise fall through to shapes.
     if (this.assets) {
       const sp = this.tileSpriteFor(c, grid, dyn);
