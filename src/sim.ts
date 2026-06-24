@@ -99,9 +99,11 @@ export class Simulation {
     this.movers = (level.movers ?? []).map((m) => ({ x: m.x, y: m.y, px: m.x, py: m.y, heading: m.heading, alive: true }));
     this.maxTicks = grid.cols * grid.rows * 8 + 100;
 
-    // Initialise switch/gate/signal state from the static tiles.
+    // Initialise switch/gate/signal state from the static tiles. Same-colour gates
+    // fold deterministically (open only if EVERY gate of that colour is open), so
+    // the shared start state never depends on grid cell order.
     for (const c of grid.cells) {
-      if (c.type === 'gate' && c.color) this.gateOpen.set(c.color, c.open ?? false);
+      if (c.type === 'gate' && c.color) this.gateOpen.set(c.color, (this.gateOpen.get(c.color) ?? true) && (c.open ?? false));
       if (c.type === 'signal') this.signalOpen.set(grid.idx(c.x, c.y), c.open ?? true);
     }
   }
@@ -176,28 +178,6 @@ export class Simulation {
     };
   }
 
-  private applyEnterEffects(cell: Cell): void {
-    if (cell.type === 'button') {
-      if (cell.color) {
-        // Small button: toggle its own link-colour gate (held colour ignores it).
-        if (!this.held.has('gate:' + cell.color)) this.gateOpen.set(cell.color, !(this.gateOpen.get(cell.color) ?? false));
-      } else {
-        // Master button (no colour): open every gate at once (skip held colours).
-        for (const g of this.grid.cells) {
-          if (g.type === 'gate' && g.color && !this.held.has('gate:' + g.color)) this.gateOpen.set(g.color, true);
-        }
-      }
-      this.events.push('button');
-    } else if (cell.type === 'switch' && cell.color) {
-      for (const c of this.grid.cells) {
-        if (c.color === cell.color && classify(c.mask) === 'junction') {
-          const i = this.grid.idx(c.x, c.y);
-          this.junctionActive.set(i, ((this.junctionActive.get(i) ?? 0) + 1) % 2);
-        }
-      }
-    }
-  }
-
   /* ----------------------------- the tick ----------------------------- */
 
   tick(): void {
@@ -231,7 +211,9 @@ export class Simulation {
     /* --- coupling decision (only when the loco actually moves) --- */
     let coupling: SimWagon | null = null;
     if (locoMoves) {
-      const fw = this.freeWagonAt(locoIntent.rawX, locoIntent.rawY);
+      // Use the real landing cell (after any teleport), so a wagon parked on a
+      // tunnel's exit couples just like one the loco rolls straight onto.
+      const fw = this.freeWagonAt(locoIntent.x, locoIntent.y);
       if (fw) {
         if (fw.number === this.nextNeeded) coupling = fw;
         else return this.fail(`wagon ${fw.number} coupled out of order`);
@@ -260,16 +242,17 @@ export class Simulation {
       return { x: m.x, y: m.y, heading: m.heading, alive: m.alive && !dead, moved: false };
     });
 
-    /* --- STEP 3: collision --- */
-    const finals: Cellxy[] = [];
-    for (const p of trainNew) finals.push(p);
-    for (const w of this.free) if (w !== coupling) finals.push({ x: w.x, y: w.y });
-    for (const p of moverNew) finals.push({ x: p.x, y: p.y });
-    const seen = new Set<string>();
-    for (const f of finals) {
-      const key = f.x + ',' + f.y;
-      if (seen.has(key)) return this.fail('collision');
-      seen.add(key);
+    /* --- STEP 3: collision ---
+       The train may legitimately overlap itself (the snake threading a crossing),
+       so train-internal repeats are NOT collisions. Only the train hitting a free
+       wagon / mover, or two of those sharing a cell, count. */
+    const seen = new Set<string>(trainNew.map((p) => p.x + ',' + p.y));
+    const others: string[] = [];
+    for (const w of this.free) if (w !== coupling) others.push(w.x + ',' + w.y);
+    for (const p of moverNew) others.push(p.x + ',' + p.y);
+    for (const k of others) {
+      if (seen.has(k)) return this.fail('collision');
+      seen.add(k);
     }
     // Swap detection among independent units (loco + movers); train-internal is safe.
     const indep: { ox: number; oy: number; nx: number; ny: number }[] = [
@@ -311,8 +294,9 @@ export class Simulation {
       if (c) enteredCells.push(c);
     };
     if (locoMoves) pushCell(this.loco.x, this.loco.y);
-    // Coupled wagons that moved trigger pass-over effects too (in chain order).
-    for (const w of this.coupled) if (w.x !== w.px || w.y !== w.py) pushCell(w.x, w.y);
+    // NB: trailing coupled wagons do NOT re-fire tile effects — a tile triggers
+    // once when the loco passes, so a button/switch can't flip per-car (which would
+    // make the outcome depend on train length parity).
 
     for (let j = 0; j < this.movers.length; j++) {
       const p = moverNew[j];
@@ -323,8 +307,38 @@ export class Simulation {
       if (p.moved) pushCell(p.x, p.y);
     }
 
-    /* --- STEP 5: enter-effects (buttons/switches), then junction pass-flips --- */
-    for (const c of enteredCells) this.applyEnterEffects(c);
+    /* --- STEP 5: enter-effects (buttons/switches), then junction pass-flips ---
+       Collect the DISTINCT effects entered this tick and apply each at most once,
+       so two same-colour buttons entered together can't cancel out and order is
+       irrelevant. */
+    const btnColors = new Set<string>();
+    let masterButton = false;
+    const switchColors = new Set<string>();
+    for (const c of enteredCells) {
+      if (c.type === 'button') {
+        if (c.color) btnColors.add(c.color);
+        else masterButton = true;
+      } else if (c.type === 'switch' && c.color) {
+        switchColors.add(c.color);
+      }
+    }
+    for (const color of btnColors) {
+      if (!this.held.has('gate:' + color)) this.gateOpen.set(color, !(this.gateOpen.get(color) ?? false));
+    }
+    if (masterButton) {
+      for (const g of this.grid.cells) {
+        if (g.type === 'gate' && g.color && !this.held.has('gate:' + g.color)) this.gateOpen.set(g.color, true);
+      }
+    }
+    for (const color of switchColors) {
+      for (const c of this.grid.cells) {
+        if (c.color === color && classify(c.mask) === 'junction') {
+          const i = this.grid.idx(c.x, c.y);
+          this.junctionActive.set(i, ((this.junctionActive.get(i) ?? 0) + 1) % 2);
+        }
+      }
+    }
+    if (btnColors.size || masterButton) this.events.push('button');
     for (const idx of flips) this.junctionActive.set(idx, ((this.junctionActive.get(idx) ?? 0) + 1) % 2);
 
     // Signals advance their phase every tick (unless held/frozen).

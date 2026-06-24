@@ -395,6 +395,74 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
     while (s2.status === 'running' && n++ < 400) s2.tick();
     eq('hold: frozen closed signal -> lose', s2.status, 'lost');
   }
+
+  // N) a long train threading a self-crossing overlaps itself there — NOT a collision
+  {
+    const X = EdgeBit.N | EdgeBit.E | EdgeBit.S | EdgeBit.W;
+    const g = new Grid(3, 3);
+    start(g, 0, 1, 'E');
+    track(g, 1, 1, X); // crossing
+    track(g, 2, 1, EdgeBit.W | EdgeBit.N);
+    track(g, 2, 0, EdgeBit.S | EdgeBit.W);
+    track(g, 1, 0, EdgeBit.E | EdgeBit.S);
+    track(g, 1, 2, EdgeBit.N | EdgeBit.W);
+    track(g, 0, 2, EdgeBit.E | EdgeBit.N);
+    const wag = [
+      { x: 1, y: 1, number: 1 },
+      { x: 2, y: 1, number: 2 },
+      { x: 2, y: 0, number: 3 },
+      { x: 1, y: 0, number: 4 },
+    ];
+    const s = new Simulation(g, lvl(3, 3, { x: 0, y: 1, heading: 'E' }, wag));
+    let n = 0;
+    while (s.status === 'running' && n++ < 6) s.tick();
+    ok('sim: train threads a crossing without a false collision', s.failReason !== 'collision');
+    eq('sim: all 4 wagons couple through the crossing', s.coupled.length, 4);
+  }
+
+  // O) a coloured button fires once per train PASS, not once per car (no length parity)
+  {
+    const build = (nWag: number): Simulation => {
+      const g = new Grid(10, 2);
+      start(g, 0, 0, 'E');
+      const wag: { x: number; y: number; number: number }[] = [];
+      for (let x = 1; x <= 8; x++) track(g, x, 0, EW);
+      for (let i = 1; i <= nWag; i++) wag.push({ x: i, y: 0, number: i });
+      special(g, 6, 0, 'button', EW, { color: 'red' });
+      special(g, 0, 1, 'gate', NS, { color: 'red', open: true }); // off-path, just holds the red state
+      exit(g, 9, 0, 'W');
+      return run(g, lvl(10, 2, { x: 0, y: 0, heading: 'E' }, wag), 80);
+    };
+    eq('sim: toggle button is train-length independent', build(1).gateIsOpen('red'), build(3).gateIsOpen('red'));
+  }
+
+  // P) a wagon parked on a tunnel's EXIT couples there instead of being a collision
+  {
+    const g = new Grid(3, 3);
+    start(g, 0, 0, 'E');
+    track(g, 1, 0, EW);
+    tunnel(g, 2, 0, 'W', 1);
+    tunnel(g, 2, 2, 'W', 1);
+    track(g, 1, 2, EW);
+    exit(g, 0, 2, 'E');
+    const s = run(g, lvl(3, 3, { x: 0, y: 0, heading: 'E' }, [{ x: 2, y: 2, number: 1 }]));
+    eq('sim: wagon on tunnel exit couples -> win', s.status, 'won');
+    eq('sim: that wagon is coupled', s.coupled.length, 1);
+  }
+
+  // R) same-colour gates with conflicting open flags fold to closed, order-independently
+  {
+    const mk = (firstOpen: boolean): Simulation => {
+      const g = new Grid(4, 1);
+      start(g, 0, 0, 'E');
+      special(g, 1, 0, 'gate', EW, { color: 'red', open: firstOpen });
+      special(g, 2, 0, 'gate', EW, { color: 'red', open: !firstOpen });
+      exit(g, 3, 0, 'W');
+      return new Simulation(g, lvl(4, 1, { x: 0, y: 0, heading: 'E' }));
+    };
+    eq('sim: conflicting same-colour gates fold to closed', mk(true).gateIsOpen('red'), false);
+    eq('sim: gate fold is order-independent', mk(true).gateIsOpen('red'), mk(false).gateIsOpen('red'));
+  }
 }
 
 /* ----------------- level validation (editor edge cases) ----------------- */
@@ -426,6 +494,18 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
   ok(
     'validate: lone tunnel -> error',
     errs(with_({ fixedTiles: [{ x: 4, y: 1, type: 'exit', heading: 'W' }, { x: 2, y: 1, type: 'tunnel', edges: ['W'], pairId: 1 }] })) > 0,
+  );
+  ok(
+    'validate: multi-edge tunnel -> error',
+    errs(
+      with_({
+        fixedTiles: [
+          { x: 4, y: 1, type: 'exit', heading: 'W' },
+          { x: 2, y: 1, type: 'tunnel', edges: ['W'], pairId: 1 },
+          { x: 1, y: 1, type: 'tunnel', edges: ['N', 'S'], pairId: 1 },
+        ],
+      }),
+    ) > 0,
   );
 }
 

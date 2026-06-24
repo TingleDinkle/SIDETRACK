@@ -76,11 +76,27 @@ export function validateLevel(L) {
             warn('A mover sits on a rock.');
         claim(m.x, m.y, 'mover');
     }
-    /* ---- tunnels: exactly 2 per pairId ---- */
+    /* ---- tunnels: exactly 2 per pairId, exactly one mouth edge each ---- */
+    const edgeCountOf = (t) => {
+        if (typeof t.mask === 'number') {
+            let n = 0;
+            let m = t.mask;
+            while (m) {
+                n += m & 1;
+                m >>= 1;
+            }
+            return n;
+        }
+        return (t.edges ?? []).length;
+    };
     const pairs = new Map();
     for (const t of tiles)
-        if (t.type === 'tunnel')
+        if (t.type === 'tunnel') {
             pairs.set(t.pairId ?? -1, (pairs.get(t.pairId ?? -1) ?? 0) + 1);
+            // The emerge direction is the tunnel's single edge; 0 or 2+ edges is ambiguous.
+            if (edgeCountOf(t) !== 1)
+                err(`Tunnel at (${t.x},${t.y}) must have exactly one mouth edge.`);
+        }
     for (const [pid, n] of pairs) {
         if (pid < 0)
             err('A tunnel has no pairId.');
@@ -98,6 +114,16 @@ export function validateLevel(L) {
             err('A gate has no colour — it can never be opened.');
         else if (!g.open && !buttonColors.has(g.color) && !hasMaster)
             warn(`Closed gate "${g.color}" has no matching button — it can never open.`);
+    }
+    // Same-colour gates share one open/closed state; flag conflicting initial flags.
+    const gateOpenByColor = new Map();
+    for (const g of gates) {
+        if (!g.color)
+            continue;
+        const o = g.open ?? false;
+        if (gateOpenByColor.has(g.color) && gateOpenByColor.get(g.color) !== o)
+            warn(`Gates of colour "${g.color}" disagree on their open state — they share one state.`);
+        gateOpenByColor.set(g.color, o);
     }
     if (hasMaster && !gates.length)
         warn('A master button has no gates to open.');
