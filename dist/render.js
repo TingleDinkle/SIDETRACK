@@ -40,8 +40,9 @@ const PAL = {
     rock: '#736c62',
     rockHi: '#8a8278',
     rockShadow: 'rgba(40,32,22,0.30)',
-    start: '#cdb892',
-    startMark: '#5b8c6a',
+    start: '#2c313d', // dark recessed entry pad, sits into the mine floor
+    startRim: '#525c70', // soft bevel highlight around the pad
+    startMark: '#6f9d86', // muted teal "enter here" accent
     exitA: '#c95f52',
     exitB: '#f1e3cf',
     loco: '#3f6fa3',
@@ -820,10 +821,27 @@ export class Renderer {
     drawStartPad(x, y) {
         const ctx = this.ctx;
         const { left, top, size } = this.cellRect(x, y);
+        const px = left + size * 0.12;
+        const py = top + size * 0.12;
+        const ps = size * 0.76;
+        const r = size * 0.14;
         ctx.save();
+        // Recessed dark pad set into the mine floor.
         ctx.fillStyle = PAL.start;
-        this.roundRect(left + size * 0.1, top + size * 0.1, size * 0.8, size * 0.8, size * 0.14);
+        this.roundRect(px, py, ps, ps, r);
         ctx.fill();
+        // Soft bevel rim so it reads as an inset socket, not a flat tile.
+        ctx.strokeStyle = PAL.startRim;
+        ctx.lineWidth = Math.max(1, size * 0.025);
+        this.roundRect(px, py, ps, ps, r);
+        ctx.stroke();
+        // Subtle "enter here" ring.
+        ctx.globalAlpha = 0.75;
+        ctx.strokeStyle = PAL.startMark;
+        ctx.lineWidth = Math.max(1, size * 0.045);
+        ctx.beginPath();
+        ctx.arc(left + size / 2, top + size / 2, size * 0.17, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.restore();
     }
     drawExit(x, y) {
