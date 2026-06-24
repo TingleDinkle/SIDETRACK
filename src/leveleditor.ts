@@ -9,7 +9,7 @@
  * persists), and the library can be exported to / imported from the game's JSON.
  */
 
-import { buildGrid, Level, LevelTile } from './level.js';
+import { buildGrid, Level, LevelMover, LevelTile, LevelWagon } from './level.js';
 import { DrawEntity, Renderer } from './render.js';
 import { AssetManager } from './assets.js';
 import { LevelStore } from './levelStore.js';
@@ -17,6 +17,7 @@ import { Issue, validateLevel } from './levelValidate.js';
 import { Heading, OPPOSITE, addEdge, edgeList, headingBetween } from './types.js';
 
 type Tool =
+  | 'select'
   | 'track'
   | 'start'
   | 'exit'
@@ -30,7 +31,20 @@ type Tool =
   | 'switch'
   | 'erase';
 
+/** What the Select tool currently has picked. References point straight at the
+ *  live level objects (which keep their identity across edits), so moving /
+ *  rotating just mutates them in place. */
+type Selection =
+  | { kind: 'loco' }
+  | { kind: 'wagon'; ref: LevelWagon }
+  | { kind: 'mover'; ref: LevelMover }
+  | { kind: 'tile'; ref: LevelTile };
+
+/** Clockwise quarter-turn for headings/edges. */
+const ROT_CW: Record<Heading, Heading> = { N: 'E', E: 'S', S: 'W', W: 'N' };
+
 const TOOLS: { tool: Tool; label: string }[] = [
+  { tool: 'select', label: '⤢ Select' },
   { tool: 'track', label: 'Track' },
   { tool: 'start', label: 'Start' },
   { tool: 'exit', label: 'Exit' },
@@ -79,6 +93,13 @@ export class LevelManager {
   private last: { x: number; y: number } | null = null;
   private trackMask = new Map<string, number>(); // "x,y" -> edge mask for fixed track
 
+  // Select tool: pick an entity/obstacle, then drag to move or rotate it.
+  private selection: Selection | null = null;
+  private dragging = false;
+  private dragHover: { x: number; y: number } | null = null;
+  private activeId: number | null = null; // the one pointer that owns the current gesture
+  private outside = false; // pointer left the board mid-paint (don't bridge track across the gap)
+
   // built UI
   private inputs!: {
     id: HTMLInputElement;
@@ -96,6 +117,10 @@ export class LevelManager {
   private toolsEl!: HTMLElement;
   private validEl!: HTMLElement;
   private editorEl!: HTMLElement;
+  private selBar!: HTMLElement;
+  private selLabel!: HTMLElement;
+  private selRotBtn!: HTMLButtonElement;
+  private selDelBtn!: HTMLButtonElement;
 
   constructor(
     private readonly refs: ManagerRefs,
@@ -110,7 +135,9 @@ export class LevelManager {
 
     this.canvas.addEventListener('pointerdown', this.onDown, { passive: false });
     this.canvas.addEventListener('pointermove', this.onMove, { passive: false });
-    window.addEventListener('pointerup', () => (this.painting = false));
+    window.addEventListener('pointerup', this.onUp);
+    window.addEventListener('pointercancel', this.onCancel);
+    window.addEventListener('keydown', this.onKey);
     new ResizeObserver(() => this.draw()).observe(this.canvas);
 
     refs.btnNew.addEventListener('click', () => {
@@ -155,6 +182,12 @@ export class LevelManager {
   }
   close(): void {
     this.refs.panel.classList.remove('show');
+    // Drop any half-finished gesture so a stray pointerup can't commit a phantom move.
+    this.clearSelection();
+    this.painting = false;
+    this.last = null;
+    this.activeId = null;
+    this.outside = false;
   }
 
   /* ----------------------------- level list ----------------------------- */
@@ -205,6 +238,7 @@ export class LevelManager {
     this.level = JSON.parse(JSON.stringify(src)) as Level;
     this.editingId = id;
     this.dirty = false;
+    this.clearSelection(); // a fresh deep-cloned level — drop any stale selection
     this.buildTrackMask();
     this.syncInputs();
     this.editorEl.style.display = '';
@@ -212,6 +246,7 @@ export class LevelManager {
     this.resize();
     this.draw();
     this.validate();
+    this.updateSelBar();
     this.status('');
   }
 
@@ -260,7 +295,10 @@ export class LevelManager {
       if (t.tool === this.tool) b.classList.add('sel');
       b.addEventListener('click', () => {
         this.tool = t.tool;
+        if (this.tool !== 'select') this.clearSelection();
         for (const c of this.toolsEl.children) c.classList.toggle('sel', (c as HTMLElement).dataset.tool === this.tool);
+        this.updateSelBar();
+        this.draw();
       });
       this.toolsEl.appendChild(b);
     }
@@ -287,6 +325,18 @@ export class LevelManager {
       openLabel,
     );
 
+    // selection bar (Select tool): shown info + rotate / delete the picked piece
+    this.selBar = el('div', 'ed-sel');
+    this.selLabel = el('span', 'ed-sel-label', '');
+    this.selRotBtn = el('button', undefined, '↻ Rotate');
+    this.selRotBtn.title = 'Rotate the selected piece (R)';
+    this.selRotBtn.addEventListener('click', () => this.rotateSelected());
+    this.selDelBtn = el('button', undefined, '🗑 Delete');
+    this.selDelBtn.title = 'Delete the selected piece (Del)';
+    this.selDelBtn.addEventListener('click', () => this.deleteSelected());
+    this.selBar.append(this.selLabel, this.selRotBtn, this.selDelBtn);
+    this.updateSelBar();
+
     // canvas
     const stage = el('div', 'ed-stage');
     stage.appendChild(el('canvas'));
@@ -308,7 +358,7 @@ export class LevelManager {
     });
     actions.append(save, test, exp);
 
-    root.append(meta, this.toolsEl, opts, stage, this.validEl, actions);
+    root.append(meta, this.toolsEl, opts, this.selBar, stage, this.validEl, actions);
     this.refs.main.appendChild(root);
     this.editorEl = root;
   }
@@ -346,10 +396,12 @@ export class LevelManager {
     const rows = Math.max(2, Math.min(12, Math.floor(Number(this.inputs.rows.value) || 5)));
     this.readInputs();
     if (cols !== this.level.grid.cols || rows !== this.level.grid.rows) {
+      this.clearSelection(); // a resize can filter out the selected piece
       this.level.grid = { cols, rows };
       const inb = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < cols && y < rows;
       this.level.fixedTiles = this.level.fixedTiles.filter((t) => inb(t.x, t.y));
       this.level.wagons = (this.level.wagons ?? []).filter((w) => inb(w.x, w.y));
+      this.level.wagons.forEach((w, i) => (w.number = i + 1)); // keep 1..N contiguous after a shrink
       this.level.movers = (this.level.movers ?? []).filter((m) => inb(m.x, m.y));
       for (const k of [...this.trackMask.keys()]) {
         const [x, y] = k.split(',').map(Number);
@@ -364,22 +416,54 @@ export class LevelManager {
     this.resize();
     this.draw();
     this.validate();
+    this.updateSelBar();
   }
 
   /* ----------------------------- painting ----------------------------- */
 
   private onDown = (e: PointerEvent): void => {
+    if (this.dragging || this.painting) return; // a gesture already owns the pointer
     e.preventDefault();
-    this.painting = true;
     const cell = this.renderer.cellAt(e.clientX, e.clientY);
     if (!cell) return;
+    this.activeId = e.pointerId;
+    this.outside = false;
+    if (this.tool === 'select') {
+      this.selection = this.pick(cell.x, cell.y);
+      this.dragging = this.selection !== null;
+      this.dragHover = null;
+      this.updateSelBar();
+      this.draw();
+      return;
+    }
+    this.painting = true;
     this.last = cell;
     if (this.tool !== 'track') this.placeAt(cell.x, cell.y);
   };
   private onMove = (e: PointerEvent): void => {
+    if (this.activeId !== null && e.pointerId !== this.activeId) return; // ignore other fingers
+    if (this.tool === 'select') {
+      if (!this.dragging || !this.selection || !this.level) return;
+      const cell = this.renderer.cellAt(e.clientX, e.clientY);
+      if (!cell) return;
+      if (this.dragHover && this.dragHover.x === cell.x && this.dragHover.y === cell.y) return;
+      e.preventDefault();
+      this.dragHover = cell;
+      this.draw(); // shows the green/red drop tint live
+      return;
+    }
     if (!this.painting || !this.level) return;
     const cell = this.renderer.cellAt(e.clientX, e.clientY);
-    if (!cell || (this.last && cell.x === this.last.x && cell.y === this.last.y)) return;
+    if (!cell) {
+      this.outside = true; // left the board — break the paint trail so we don't bridge across it
+      return;
+    }
+    if (this.outside) {
+      this.last = cell; // re-entered elsewhere; resume from here without a bridging line
+      this.outside = false;
+      return;
+    }
+    if (this.last && cell.x === this.last.x && cell.y === this.last.y) return;
     e.preventDefault();
     if (this.tool === 'track' && this.last) {
       this.walkLayTrack(this.last, cell); // interpolate so fast drags don't skip cells
@@ -388,6 +472,69 @@ export class LevelManager {
       this.placeAt(cell.x, cell.y);
     }
     this.last = cell;
+  };
+  private onUp = (e: PointerEvent): void => {
+    if (this.activeId !== null && e.pointerId !== this.activeId) return;
+    if (this.refs.panel.classList.contains('show') && this.tool === 'select' && this.dragging) {
+      this.dragging = false;
+      const to = this.dragHover;
+      this.dragHover = null;
+      const from = this.selectedPos();
+      if (to && from && (to.x !== from.x || to.y !== from.y)) {
+        if (this.canDropAt(to.x, to.y)) {
+          this.moveSelectedTo(to.x, to.y);
+          this.afterEdit();
+          this.updateSelBar();
+        } else {
+          this.status('Can’t drop there.');
+          this.draw();
+        }
+      } else {
+        this.draw();
+      }
+    }
+    this.dragging = false;
+    this.painting = false;
+    this.activeId = null;
+    this.outside = false;
+  };
+  /** A touch/pen gesture was interrupted (scroll, palm, OS back-swipe): abandon it
+   *  cleanly — never commit a move — and clear the drag tint. */
+  private onCancel = (e: PointerEvent): void => {
+    if (this.activeId !== null && e.pointerId !== this.activeId) return;
+    this.dragging = false;
+    this.painting = false;
+    this.last = null;
+    this.dragHover = null;
+    this.activeId = null;
+    this.outside = false;
+    this.draw();
+  };
+  private onKey = (e: KeyboardEvent): void => {
+    if (!this.refs.panel.classList.contains('show')) return;
+    if (this.tool !== 'select' || !this.selection || !this.level) return;
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+    const nudge = (dx: number, dy: number): void => {
+      const p = this.selectedPos();
+      if (!p) return;
+      const nx = p.x + dx;
+      const ny = p.y + dy;
+      if (this.canDropAt(nx, ny)) {
+        this.moveSelectedTo(nx, ny);
+        this.afterEdit();
+        this.updateSelBar();
+      }
+    };
+    switch (e.key) {
+      case 'r': case 'R': e.preventDefault(); this.rotateSelected(); break;
+      case 'Delete': case 'Backspace': e.preventDefault(); this.deleteSelected(); break;
+      case 'Escape': this.clearSelection(); this.updateSelBar(); this.draw(); break;
+      case 'ArrowLeft': e.preventDefault(); nudge(-1, 0); break;
+      case 'ArrowRight': e.preventDefault(); nudge(1, 0); break;
+      case 'ArrowUp': e.preventDefault(); nudge(0, -1); break;
+      case 'ArrowDown': e.preventDefault(); nudge(0, 1); break;
+    }
   };
 
   private placeAt(x: number, y: number): void {
@@ -471,6 +618,178 @@ export class LevelManager {
     this.afterEdit();
   }
 
+  /* ----------------------------- selection (Select tool) ----------------------------- */
+
+  /** What's at a cell, top-most first: loco > wagon > mover > obstacle tile.
+   *  Plain track is left to the Track/Erase tools, so it is not selectable. */
+  private pick(x: number, y: number): Selection | null {
+    const L = this.level;
+    if (!L) return null;
+    if (L.locomotive.x === x && L.locomotive.y === y) return { kind: 'loco' };
+    const w = (L.wagons ?? []).find((w) => w.x === x && w.y === y);
+    if (w) return { kind: 'wagon', ref: w };
+    const m = (L.movers ?? []).find((m) => m.x === x && m.y === y);
+    if (m) return { kind: 'mover', ref: m };
+    const t = L.fixedTiles.find((t) => t.type !== 'track' && t.x === x && t.y === y);
+    if (t) return { kind: 'tile', ref: t };
+    return null;
+  }
+
+  private selectedPos(): { x: number; y: number } | null {
+    const s = this.selection;
+    if (!s || !this.level) return null;
+    if (s.kind === 'loco') return { x: this.level.locomotive.x, y: this.level.locomotive.y };
+    return { x: s.ref.x, y: s.ref.y };
+  }
+
+  private selectedName(): string {
+    const s = this.selection;
+    if (!s) return '';
+    if (s.kind === 'loco') return 'Locomotive';
+    if (s.kind === 'wagon') return `Wagon ${s.ref.number}`;
+    if (s.kind === 'mover') return 'Mover';
+    return s.ref.type.charAt(0).toUpperCase() + s.ref.type.slice(1);
+  }
+
+  private moveSelectedTo(x: number, y: number): void {
+    const s = this.selection;
+    if (!s || !this.level) return;
+    if (s.kind === 'loco') {
+      this.level.locomotive.x = x;
+      this.level.locomotive.y = y;
+    } else {
+      s.ref.x = x;
+      s.ref.y = y;
+    }
+  }
+
+  /** Strict: refuse any drop that stacks two pieces in one cell (an obstacle can
+   *  still share a cell with laid track, exactly as gates/tunnels do in real
+   *  levels), or that drops a rock onto rail. Out of bounds is refused too. */
+  private canDropAt(x: number, y: number): boolean {
+    const s = this.selection;
+    const L = this.level;
+    if (!s || !L) return false;
+    if (x < 0 || y < 0 || x >= L.grid.cols || y >= L.grid.rows) return false;
+    const cur = this.selectedPos();
+    if (cur && cur.x === x && cur.y === y) return false;
+    const locoHere = !(s.kind === 'loco') && L.locomotive.x === x && L.locomotive.y === y;
+    const wagonHere = (L.wagons ?? []).some((w) => !(s.kind === 'wagon' && s.ref === w) && w.x === x && w.y === y);
+    const moverHere = (L.movers ?? []).some((m) => !(s.kind === 'mover' && s.ref === m) && m.x === x && m.y === y);
+    const tileHere = L.fixedTiles.some((t) => t.type !== 'track' && !(s.kind === 'tile' && s.ref === t) && t.x === x && t.y === y);
+    if (locoHere || wagonHere || moverHere || tileHere) return false; // one piece per cell
+    if (s.kind === 'tile' && s.ref.type === 'rock') {
+      const trackHere = (this.trackMask.get(`${x},${y}`) ?? 0) !== 0;
+      if (trackHere) return false; // a rock can't sit on rail
+    }
+    return true;
+  }
+
+  private rotateSelected(): void {
+    const s = this.selection;
+    if (!s || !this.level) return;
+    if (s.kind === 'loco') {
+      this.level.locomotive.heading = ROT_CW[this.level.locomotive.heading];
+    } else if (s.kind === 'mover') {
+      s.ref.heading = ROT_CW[s.ref.heading];
+    } else if (s.kind === 'tile') {
+      const t = s.ref;
+      // Effective mask = authored raw mask OR'd with its edge list (buildGrid does
+      // the same); we then rewrite edges and drop the stale raw mask so a tile
+      // authored with `mask` rotates correctly instead of accumulating bits.
+      const effMask = (typeof t.mask === 'number' ? t.mask : 0) | (t.edges ?? []).reduce((m, e) => addEdge(m, e), 0);
+      const firstEdge = edgeList(effMask)[0];
+      if (t.type === 'exit') {
+        delete t.mask;
+        t.heading = ROT_CW[t.heading ?? firstEdge ?? 'E'];
+        t.edges = [t.heading];
+      } else if (t.type === 'tunnel') {
+        delete t.mask;
+        t.edges = [ROT_CW[(t.edges && t.edges[0]) ?? firstEdge ?? 'E']];
+      } else if (t.type === 'gate' || t.type === 'signal' || t.type === 'button' || t.type === 'switch') {
+        const horiz = (effMask & 2) !== 0 || (effMask & 8) !== 0; // E=2, W=8
+        delete t.mask;
+        t.edges = horiz ? ['N', 'S'] : ['W', 'E']; // 90° flip (the piece is symmetric across the track)
+      } else {
+        this.status('Rocks have no orientation.');
+        return;
+      }
+    } else {
+      this.status('Wagons follow the train — nothing to rotate.');
+      return;
+    }
+    this.afterEdit();
+    this.updateSelBar();
+  }
+
+  private deleteSelected(): void {
+    const s = this.selection;
+    const L = this.level;
+    if (!s || !L) return;
+    if (s.kind === 'loco') {
+      this.status('Every level needs its locomotive — it can’t be deleted.');
+      return;
+    }
+    if (s.kind === 'wagon') {
+      L.wagons = (L.wagons ?? []).filter((w) => w !== s.ref);
+      L.wagons.forEach((w, i) => (w.number = i + 1));
+    } else if (s.kind === 'mover') {
+      L.movers = (L.movers ?? []).filter((m) => m !== s.ref);
+    } else {
+      L.fixedTiles = L.fixedTiles.filter((t) => t !== s.ref);
+    }
+    this.selection = null;
+    this.afterEdit();
+    this.updateSelBar();
+  }
+
+  private clearSelection(): void {
+    this.selection = null;
+    this.dragging = false;
+    this.dragHover = null;
+  }
+
+  private updateSelBar(): void {
+    const inSelect = this.tool === 'select';
+    this.selBar.style.display = inSelect ? '' : 'none';
+    const has = inSelect && this.selection !== null;
+    this.selLabel.textContent = has
+      ? `Selected: ${this.selectedName()} — drag to move · ↻ / R to rotate`
+      : 'Tap a piece (train, wagon, mover, obstacle) to move or rotate it.';
+    const noRot = !this.selection || this.selection.kind === 'wagon' || (this.selection.kind === 'tile' && this.selection.ref.type === 'rock');
+    this.selRotBtn.disabled = noRot;
+    this.selDelBtn.disabled = !this.selection || this.selection.kind === 'loco';
+  }
+
+  /** Selection ring + (during a drag) the green/red drop-target tint. Drawn on
+   *  the editor canvas after the renderer, so render.ts stays untouched. */
+  private drawOverlays(): void {
+    if (this.tool !== 'select') return;
+    const ctx = this.canvas.getContext('2d');
+    if (!ctx) return;
+    const { ox, oy, cell } = this.renderer.layout;
+    if (this.dragHover) {
+      const cur = this.selectedPos();
+      if (cur && (this.dragHover.x !== cur.x || this.dragHover.y !== cur.y)) {
+        const ok = this.canDropAt(this.dragHover.x, this.dragHover.y);
+        ctx.save();
+        ctx.fillStyle = ok ? 'rgba(80,180,100,0.40)' : 'rgba(210,85,63,0.40)';
+        ctx.fillRect(ox + this.dragHover.x * cell + 2, oy + this.dragHover.y * cell + 2, cell - 4, cell - 4);
+        ctx.restore();
+      }
+    }
+    const p = this.selectedPos();
+    if (p) {
+      const lw = Math.max(2, cell * 0.06);
+      ctx.save();
+      ctx.strokeStyle = '#ffe27a';
+      ctx.lineWidth = lw;
+      ctx.setLineDash([cell * 0.16, cell * 0.12]);
+      ctx.strokeRect(ox + p.x * cell + lw, oy + p.y * cell + lw, cell - 2 * lw, cell - 2 * lw);
+      ctx.restore();
+    }
+  }
+
   /* ----------------------------- fixed track ----------------------------- */
 
   private buildTrackMask(): void {
@@ -487,7 +806,10 @@ export class LevelManager {
    *  rail-bearing fixed tile (start/exit/tunnel/gate/button/signal/switch). */
   private trackTargetAt(x: number, y: number): 'lay' | 'connect' | 'no' {
     if (!this.level) return 'no';
-    const tile = this.level.fixedTiles.find((t) => t.x === x && t.y === y);
+    // A cell may hold both a rail-bearing tile and laid track; prefer the tile.
+    const tile =
+      this.level.fixedTiles.find((t) => t.type !== 'track' && t.x === x && t.y === y) ??
+      this.level.fixedTiles.find((t) => t.type === 'track' && t.x === x && t.y === y);
     if (!tile) return 'lay';
     if (tile.type === 'track') return 'lay';
     if (tile.type === 'rock') return 'no';
@@ -556,6 +878,7 @@ export class LevelManager {
     for (const m of this.level.movers ?? []) ents.push({ kind: 'mover', x: m.x, y: m.y, heading: m.heading });
     ents.push({ kind: 'loco', x: this.level.locomotive.x, y: this.level.locomotive.y, heading: this.level.locomotive.heading });
     this.renderer.draw(grid, ents);
+    this.drawOverlays();
   }
   private validate(): Issue[] {
     if (!this.level) return [];

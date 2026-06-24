@@ -375,11 +375,32 @@
       #editor .ed-tools,
       #editor .ed-opts,
       #editor .ed-meta,
+      #editor .ed-sel,
       #editor .ed-actions {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: 8px;
+      }
+      #editor .ed-sel {
+        padding: 6px 8px;
+        background: var(--panel);
+        border: 2px solid var(--panel-edge);
+        border-radius: 10px;
+      }
+      #editor .ed-sel button {
+        min-height: 44px;
+      }
+      #editor .ed-sel button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .ed-sel-label {
+        font-size: 13px;
+        color: var(--ink-soft);
+        font-weight: 600;
+        flex: 1 1 auto;
+        min-width: 160px;
       }
       #editor label {
         font-size: 13px;
