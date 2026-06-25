@@ -18,11 +18,24 @@ export interface PathStart {
   heading: Heading;
 }
 
-export function tracePath(grid: Grid, start: PathStart): { x: number; y: number }[] {
-  const path: { x: number; y: number }[] = [{ x: start.x, y: start.y }];
+export interface TraceResult {
+  cells: { x: number; y: number }[];
+  /** 'exit' = the route reaches the goal; 'derail' = it runs off / can't connect. */
+  outcome: 'exit' | 'derail';
+  /** Cells along the route that sit on a wagon (where pickups would happen). */
+  pickups: { x: number; y: number }[];
+}
+
+export function tracePath(
+  grid: Grid,
+  start: PathStart,
+  wagons: { x: number; y: number }[] = [],
+): TraceResult {
+  const cells: { x: number; y: number }[] = [{ x: start.x, y: start.y }];
   let x = start.x;
   let y = start.y;
   let h: Heading = start.heading;
+  let outcome: 'exit' | 'derail' = 'derail';
   const seen = new Set<string>();
   const cap = grid.cols * grid.rows * 3 + 8;
 
@@ -44,7 +57,8 @@ export function tracePath(grid: Grid, start: PathStart): { x: number; y: number 
 
     if (dest.type === 'exit') {
       if (!hasEdge(c.mask, dir)) break; // can't coast into the goal — needs a rail at its edge
-      path.push({ x: nx, y: ny });
+      cells.push({ x: nx, y: ny });
+      outcome = 'exit';
       break;
     }
 
@@ -53,20 +67,21 @@ export function tracePath(grid: Grid, start: PathStart): { x: number; y: number 
         (o) => o !== dest && o.type === 'tunnel' && o.pairId === dest.pairId,
       );
       const mouth = pair ? edgeList(pair.mask)[0] : undefined;
-      path.push({ x: nx, y: ny });
+      cells.push({ x: nx, y: ny });
       if (!pair || !mouth) break; // unpaired tunnel — stop here
       x = pair.x;
       y = pair.y;
       h = mouth;
-      path.push({ x, y });
+      cells.push({ x, y });
       continue;
     }
 
     x = nx;
     y = ny;
     h = dir;
-    path.push({ x, y });
+    cells.push({ x, y });
   }
 
-  return path;
+  const pickups = wagons.filter((w) => cells.some((c) => c.x === w.x && c.y === w.y));
+  return { cells, outcome, pickups };
 }

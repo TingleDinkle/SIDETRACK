@@ -15,10 +15,10 @@ import { Editor } from './editor.js';
 import { InputController } from './input.js';
 import { Level, buildGrid } from './level.js';
 import { Grid } from './grid.js';
-import { DrawEntity, DynamicState, Renderer } from './render.js';
+import { DrawEntity, DynamicState, Renderer, linkColor } from './render.js';
 import { Simulation } from './sim.js';
 import { AudioManager } from './sound.js';
-import { Heading } from './types.js';
+import { DELTA, Heading } from './types.js';
 import { easeFrac, MotionPhase } from './feel/motion.js';
 import { tracePath } from './feel/pathpreview.js';
 
@@ -76,6 +76,9 @@ export class Game {
   private now = 0; // latest RAF timestamp (for particle spawns)
   private finishing = false; // playing out the final move (win) before the panel
   private settling = false; // final move eases to a stop instead of cruising
+  private prevLocoHeading: Heading | undefined; // for lean-into-curves detection
+  private locoRoll = 0; // current cosmetic lean (radians), decays each frame
+  private ambientStarted = false; // start the mine-ambience bed once, after a gesture
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -192,18 +195,84 @@ export class Game {
       if (ev === 'couple') {
         this.audio.play('couple');
         this.renderer.spawnBurst(s.loco.x, s.loco.y, '#ffe7a0', 12, this.now);
+        this.renderer.kick(0.12); // a little jolt as the wagon snaps on
         navigator.vibrate?.(20);
       } else if (ev === 'button') {
         this.audio.play('button');
+        this.reactButtons();
+      } else if (ev === 'switch') {
+        this.reactSwitches();
       }
     }
-    // Rolling feedback — only when the loco actually advanced (it idles silently
-    // while held at a signal/gate): a rail clack + a chimney puff drifting behind.
-    const moved = s.loco.x !== s.loco.px || s.loco.y !== s.loco.py;
-    if (s.status === 'running' && moved) {
-      this.audio.play('clack');
-      this.renderer.spawnSmoke(s.loco.x, s.loco.y, this.now, s.loco.heading);
+    this.reactTeleports();
+
+    // Rolling feedback. While advancing: a rail clack + a chimney puff drifting
+    // behind. While held at a signal/gate: a small impatient puff straight up.
+    if (s.status === 'running') {
+      const moved = s.loco.x !== s.loco.px || s.loco.y !== s.loco.py;
+      if (moved) {
+        this.audio.play('clack');
+        this.renderer.spawnSmoke(s.loco.x, s.loco.y, this.now, s.loco.heading);
+      } else {
+        this.renderer.spawnSmoke(s.loco.x, s.loco.y, this.now);
+      }
     }
+  }
+
+  /** A button was stepped on: pulse the link to each gate it controls, flash the
+   *  gate, kick up dust, and clunk. (Derives the buttons hit from unit positions.) */
+  private reactButtons(): void {
+    const s = this.sim;
+    if (!s) return;
+    const units = [{ x: s.loco.x, y: s.loco.y }, ...s.movers.map((m) => ({ x: m.x, y: m.y }))];
+    let reacted = false;
+    for (const u of units) {
+      const cell = this.grid.get(u.x, u.y);
+      if (!cell || cell.type !== 'button') continue;
+      const master = !cell.color;
+      const col = master ? '#f3e1b0' : linkColor(cell.color);
+      for (const g of this.grid.cells) {
+        if (g.type !== 'gate') continue;
+        if (!master && g.color !== cell.color) continue;
+        this.renderer.fxLink(u.x, u.y, g.x, g.y, col, this.now);
+        this.renderer.fxRing(g.x, g.y, col, this.now);
+        this.renderer.spawnBurst(g.x, g.y, 'rgba(150,140,130,0.8)', 5, this.now); // dust
+        reacted = true;
+      }
+    }
+    if (reacted) this.audio.play('gate');
+  }
+
+  /** A switch was thrown: ring it and ka-chak. (The junction chevron already flips.) */
+  private reactSwitches(): void {
+    const s = this.sim;
+    if (!s) return;
+    const units = [{ x: s.loco.x, y: s.loco.y }, ...s.movers.map((m) => ({ x: m.x, y: m.y }))];
+    let reacted = false;
+    for (const u of units) {
+      const cell = this.grid.get(u.x, u.y);
+      if (cell && cell.type === 'switch' && cell.color) {
+        this.renderer.fxRing(u.x, u.y, linkColor(cell.color), this.now);
+        reacted = true;
+      }
+    }
+    if (reacted) this.audio.play('switch');
+  }
+
+  /** Any unit that jumped more than a cell this tick teleported — whoosh both mouths. */
+  private reactTeleports(): void {
+    const s = this.sim;
+    if (!s) return;
+    const units = [s.loco, ...s.movers];
+    let teleported = false;
+    for (const u of units) {
+      if (Math.abs(u.x - u.px) + Math.abs(u.y - u.py) > 1.5) {
+        this.renderer.fxWhoosh(u.px, u.py, '#9a6fc0', this.now);
+        this.renderer.fxWhoosh(u.x, u.y, '#9a6fc0', this.now);
+        teleported = true;
+      }
+    }
+    if (teleported) this.audio.play('teleport');
   }
 
   private dynState(): DynamicState | null {
@@ -233,19 +302,27 @@ export class Game {
       dx === 0 && dy === 0 ? fb : Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N';
     if (this.sim) {
       const s = this.sim;
+      // Cosmetic life: a chug-bob (≈one bob per tick) and a lean into curves,
+      // only while the train is actually rolling.
+      const cruising = this.state === 'running' && s.status === 'running';
+      const bob = cruising ? Math.sin(this.now * 0.017) * 0.022 : 0;
+      this.updateLocoRoll(cruising ? s.loco.heading : undefined);
       for (const w of s.free) out.push({ kind: 'wagon', x: w.x, y: w.y, heading: w.heading, number: w.number });
       const lp = pos(s.loco.px, s.loco.py, s.loco.x, s.loco.y);
+      lp.y += bob;
       const chain: { x: number; y: number }[] = [lp]; // front-to-back train positions
       for (const w of s.coupled) {
         const p = pos(w.px, w.py, w.x, w.y);
+        p.y += bob;
         chain.push(p);
         out.push({ kind: 'wagon', x: p.x, y: p.y, heading: dirOf(w.x - w.px, w.y - w.py, w.heading), number: w.number, coupled: true });
       }
       for (const m of s.movers) {
         const p = pos(m.px, m.py, m.x, m.y);
+        p.y += bob;
         out.push({ kind: 'mover', x: p.x, y: p.y, heading: m.heading });
       }
-      out.push({ kind: 'loco', x: lp.x, y: lp.y, heading: s.loco.heading });
+      out.push({ kind: 'loco', x: lp.x, y: lp.y, heading: s.loco.heading, roll: this.locoRoll });
       // A coupler between each adjacent pair of cars (skip teleport gaps).
       for (let i = 0; i < chain.length - 1; i++) {
         const a = chain[i];
@@ -277,6 +354,8 @@ export class Game {
     this.acc = 0;
     this.finishing = false;
     this.settling = false;
+    this.locoRoll = 0;
+    this.prevLocoHeading = undefined;
     this.hideOutcome();
   }
 
@@ -325,10 +404,29 @@ export class Game {
     this.updateControls();
   }
 
-  /** Where the train will roll given the current track (editing-only telegraph). */
-  private previewPath(): { x: number; y: number }[] | undefined {
+  /** Where the train will roll given the current track (editing-only telegraph),
+   *  plus whether it reaches the goal and where it would grab wagons. */
+  private previewPath(): ReturnType<typeof tracePath> | undefined {
     if (this.state !== 'editing') return undefined;
-    return tracePath(this.grid, this.level.locomotive);
+    const wagons = (this.level.wagons ?? []).map((w) => ({ x: w.x, y: w.y }));
+    return tracePath(this.grid, this.level.locomotive, wagons);
+  }
+
+  /** Lean-into-curves: set a brief tilt impulse when the loco changes heading,
+   *  decaying each frame. Pass undefined when not rolling to clear it. */
+  private updateLocoRoll(heading: Heading | undefined): void {
+    if (!heading) {
+      this.locoRoll = 0;
+      this.prevLocoHeading = undefined;
+      return;
+    }
+    if (this.prevLocoHeading && heading !== this.prevLocoHeading) {
+      const a = DELTA[this.prevLocoHeading];
+      const b = DELTA[heading];
+      this.locoRoll = Math.sign(a.dx * b.dy - a.dy * b.dx) * 0.2; // lean into the turn
+    }
+    this.prevLocoHeading = heading;
+    this.locoRoll *= 0.88; // decay
   }
 
   /* ----------------------------- view ----------------------------- */
@@ -411,6 +509,11 @@ export class Game {
   }
 
   play(): void {
+    // First Play is a user gesture — safe to start the WebAudio ambience bed.
+    if (!this.ambientStarted) {
+      this.audio.startAmbient();
+      this.ambientStarted = true;
+    }
     switch (this.state) {
       case 'editing':
         this.startSim();

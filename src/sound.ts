@@ -18,12 +18,16 @@ export type Sfx =
   | 'arrive'
   | 'clack' // per-tick rail-joint click while rolling
   | 'whistle' // steam toot on launch / victory
-  | 'crash'; // derail impact
+  | 'crash' // derail impact
+  | 'gate' // a gate clunking open/shut
+  | 'switch' // a junction switch throwing
+  | 'teleport'; // tunnel whoosh
 
 export class AudioManager {
   enabled = true;
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private ambient: { bed: GainNode; oscs: OscillatorNode[]; noise: AudioBufferSourceNode | null } | null = null;
 
   /** Lazily create the AudioContext (must follow a user gesture on most browsers). */
   private ensure(): AudioContext | null {
@@ -43,6 +47,99 @@ export class AudioManager {
 
   setEnabled(on: boolean): void {
     this.enabled = on;
+    // Mute at the master so the ambient bed (a persistent node, not a play() blip)
+    // is silenced too.
+    if (this.master && this.ctx) {
+      this.master.gain.setTargetAtTime(on ? 0.5 : 0.0001, this.ctx.currentTime, 0.05);
+    }
+  }
+
+  /** Start a soft, looping mine-ambience bed (low drone + filtered wind). Safe to
+   *  call repeatedly; only the first call after a user gesture takes effect. */
+  startAmbient(): void {
+    if (this.ambient) return;
+    const ctx = this.ensure();
+    if (!ctx || !this.master) return;
+    if (ctx.state === 'suspended') void ctx.resume();
+    const t = ctx.currentTime;
+
+    const bed = ctx.createGain();
+    bed.gain.setValueAtTime(0, t);
+    bed.gain.linearRampToValueAtTime(0.16, t + 2.5); // fade in
+    bed.connect(this.master);
+
+    // Low drone — a root + a detuned fifth + an octave-ish triangle.
+    const drone = ctx.createGain();
+    drone.gain.value = 0.5;
+    drone.connect(bed);
+    const oscs = [
+      this.osc(58, 'sine'),
+      this.osc(87.4, 'sine'),
+      this.osc(116.2, 'triangle'),
+    ].filter((o): o is OscillatorNode => o !== null);
+    for (const o of oscs) o.connect(drone);
+
+    // Wind — looping noise through a band-pass that a slow LFO sweeps.
+    const noise = this.loopNoise();
+    const wind = ctx.createGain();
+    wind.gain.value = 0.12;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 320;
+    bp.Q.value = 0.7;
+    const lfo = this.osc(0.05, 'sine');
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 160;
+    if (lfo) {
+      lfo.connect(lfoGain);
+      lfoGain.connect(bp.frequency);
+    }
+    if (noise) {
+      noise.connect(bp);
+      bp.connect(wind);
+      wind.connect(bed);
+    }
+
+    const all = [...oscs, lfo].filter((o): o is OscillatorNode => o !== null);
+    for (const o of all) o.start();
+    if (noise) noise.start();
+    this.ambient = { bed, oscs: all, noise };
+  }
+
+  stopAmbient(): void {
+    const a = this.ambient;
+    if (!a || !this.ctx) return;
+    a.bed.gain.setTargetAtTime(0.0001, this.ctx.currentTime, 0.4);
+    const oscs = a.oscs;
+    const noise = a.noise;
+    window.setTimeout(() => {
+      for (const o of oscs) try { o.stop(); } catch { /* already stopped */ }
+      if (noise) try { noise.stop(); } catch { /* already stopped */ }
+    }, 700);
+    this.ambient = null;
+  }
+
+  /** A bare oscillator (caller wires + starts it). null if no context. */
+  private osc(freq: number, type: OscillatorType): OscillatorNode | null {
+    if (!this.ctx) return null;
+    const o = this.ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = freq;
+    return o;
+  }
+
+  /** A 2s looping white-noise source (caller wires + starts it). */
+  private loopNoise(): AudioBufferSourceNode | null {
+    const ctx = this.ctx;
+    if (!ctx) return null;
+    const n = Math.floor(ctx.sampleRate * 2);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    return src;
   }
 
   /** A single enveloped oscillator note. */
@@ -119,11 +216,13 @@ export class AudioManager {
         this.note(330, t, 0.18, 'sawtooth', 0.2);
         this.note(220, t + 0.12, 0.28, 'sawtooth', 0.2);
         break;
-      case 'clack':
-        // a soft low "tk" — quiet so it pleasantly keeps time, not annoying
-        this.note(150, t, 0.03, 'square', 0.05);
-        this.note(110, t + 0.018, 0.03, 'square', 0.045);
+      case 'clack': {
+        // a soft low "tk" — quiet, with a little pitch jitter so it isn't monotone
+        const j = (Math.random() - 0.5) * 28;
+        this.note(150 + j, t, 0.03, 'square', 0.05);
+        this.note(110 + j, t + 0.018, 0.03, 'square', 0.045);
         break;
+      }
       case 'whistle': {
         // two-tone steam toot
         this.note(740, t, 0.22, 'triangle', 0.13);
@@ -135,6 +234,23 @@ export class AudioManager {
         this.noise(t, 0.34, 0.4, 1700); // gravelly impact
         this.note(80, t, 0.26, 'sawtooth', 0.32); // low thud underneath
         this.note(120, t + 0.04, 0.18, 'sawtooth', 0.18);
+        break;
+      case 'gate':
+        // a heavy clunk: low thud + a short metallic snap
+        this.note(140, t, 0.07, 'square', 0.15);
+        this.note(90, t + 0.04, 0.13, 'sawtooth', 0.13);
+        this.noise(t, 0.06, 0.12, 1000);
+        break;
+      case 'switch':
+        // "ka-chak" — two crisp clicks
+        this.note(300, t, 0.03, 'square', 0.13);
+        this.note(430, t + 0.05, 0.04, 'square', 0.13);
+        break;
+      case 'teleport':
+        // airy whoosh + a rising shimmer
+        this.noise(t, 0.22, 0.16, 1300);
+        this.note(330, t, 0.12, 'sine', 0.1);
+        this.note(620, t + 0.08, 0.14, 'sine', 0.1);
         break;
     }
   }

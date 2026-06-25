@@ -14,6 +14,7 @@ import { EdgeBit, OPPOSITE, addEdge, edgeList, hasEdge } from './types.js';
 import { classify } from './track.js';
 import { Shake } from './feel/shake.js';
 import { drawHeadlight } from './feel/lighting.js';
+import { Effects } from './feel/effects.js';
 // Calibration offsets for the baked track/coupler sprites (radians). Tuned so
 // the corner piece connects the right edges and couplers lie along the train.
 const CURVE_BASE = 0;
@@ -27,7 +28,7 @@ const LINK_COLORS = {
     purple: '#9a6fc0',
     orange: '#e0883c',
 };
-const linkColor = (name) => (name ? (LINK_COLORS[name] ?? '#8a7a64') : '#8a7a64');
+export const linkColor = (name) => (name ? (LINK_COLORS[name] ?? '#8a7a64') : '#8a7a64');
 const PAL = {
     bg: '#ead9bb',
     boardLight: '#dcc8a2',
@@ -64,6 +65,7 @@ export class Renderer {
         this.particles = [];
         this.lastDrawMs = 0;
         this.shakeFx = new Shake();
+        this.fx = new Effects();
         this.assets = null;
         this.theme = 1; // world number, selects ground_w{theme}
         this.canvas = canvas;
@@ -136,6 +138,16 @@ export class Renderer {
     kick(intensity) {
         this.shakeFx.kick(intensity);
     }
+    /** World-reaction effects — fired from sim events (gate clunk, button link, …). */
+    fxRing(cellX, cellY, color, tMs) {
+        this.fx.ring(cellX, cellY, color, tMs);
+    }
+    fxLink(ax, ay, bx, by, color, tMs) {
+        this.fx.pulse(ax, ay, bx, by, color, tMs);
+    }
+    fxWhoosh(cellX, cellY, color, tMs) {
+        this.fx.whoosh(cellX, cellY, color, tMs);
+    }
     draw(grid, entities, dyn = null, tMs = 0, preview) {
         const ctx = this.ctx;
         const { cssW, cssH } = this.layout;
@@ -162,7 +174,7 @@ export class Renderer {
         for (const c of grid.cells)
             this.drawTileMarker(c, grid, dyn, 'object');
         // Planned-route telegraph (editing only): where the train will roll.
-        if (preview && preview.length > 1)
+        if (preview && preview.cells.length > 1)
             this.drawPreview(preview, tMs);
         // Warm headlight pool under the loco for the dark-mine mood.
         const loco = entities.find((e) => e.kind === 'loco');
@@ -180,17 +192,24 @@ export class Renderer {
         for (const e of entities)
             if (e.kind === 'loco')
                 this.drawEntity(e);
+        // World-reaction flashes (gate clunk, button→gate link, teleport) over the board.
+        this.fx.draw(ctx, this.layout.ox, this.layout.oy, this.layout.cell, tMs);
         this.drawParticles(tMs);
         ctx.restore();
         this.drawVignette();
     }
-    /** Dashed, marching route telegraph through cell centres toward the goal. */
-    drawPreview(cells, tMs) {
+    /** Dashed, marching route telegraph: green to the goal, red (with an ✕) if it
+     *  would derail, plus amber rings where it would grab wagons. */
+    drawPreview(route, tMs) {
+        const { cells, outcome, pickups } = route;
         const { ox, oy, cell } = this.layout;
         const ctx = this.ctx;
         const px = (c) => [ox + (c.x + 0.5) * cell, oy + (c.y + 0.5) * cell];
+        const ok = outcome === 'exit';
+        const line = ok ? 'rgba(126,208,154,0.55)' : 'rgba(214,108,84,0.6)';
+        const mark = ok ? 'rgba(126,208,154,0.75)' : 'rgba(214,108,84,0.85)';
         ctx.save();
-        ctx.strokeStyle = 'rgba(126,208,154,0.5)';
+        ctx.strokeStyle = line;
         ctx.lineWidth = Math.max(2, cell * 0.06);
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -205,13 +224,35 @@ export class Renderer {
                 ctx.moveTo(x, y);
         });
         ctx.stroke();
-        // a soft dot where the route ends (exit reached, or where it would derail)
         ctx.setLineDash([]);
-        ctx.fillStyle = 'rgba(126,208,154,0.65)';
+        // Pickup markers — rings where the route grabs a wagon.
+        ctx.strokeStyle = 'rgba(245,210,140,0.9)';
+        ctx.lineWidth = Math.max(1.5, cell * 0.04);
+        for (const p of pickups) {
+            const [x, y] = px(p);
+            ctx.beginPath();
+            ctx.arc(x, y, cell * 0.22, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        // End marker: a filled dot at the goal, or an ✕ where it derails.
         const [ex, ey] = px(cells[cells.length - 1]);
-        ctx.beginPath();
-        ctx.arc(ex, ey, cell * 0.08, 0, Math.PI * 2);
-        ctx.fill();
+        if (ok) {
+            ctx.fillStyle = mark;
+            ctx.beginPath();
+            ctx.arc(ex, ey, cell * 0.1, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        else {
+            ctx.strokeStyle = mark;
+            ctx.lineWidth = Math.max(2, cell * 0.06);
+            const r = cell * 0.12;
+            ctx.beginPath();
+            ctx.moveTo(ex - r, ey - r);
+            ctx.lineTo(ex + r, ey + r);
+            ctx.moveTo(ex + r, ey - r);
+            ctx.lineTo(ex - r, ey + r);
+            ctx.stroke();
+        }
         ctx.restore();
     }
     /** Soft darkening toward the edges for depth (works with or without art). */
@@ -366,7 +407,7 @@ export class Renderer {
     drawEntity(e) {
         switch (e.kind) {
             case 'loco':
-                this.drawLocomotive(e.x, e.y, e.heading);
+                this.drawLocomotive(e.x, e.y, e.heading, e.roll ?? 0);
                 break;
             case 'wagon':
                 this.drawWagon(e.x, e.y, e.number ?? 0, e.heading, e.coupled ?? false);
@@ -1065,18 +1106,18 @@ export class Renderer {
     headingAngle(h) {
         return { E: 0, S: Math.PI / 2, W: Math.PI, N: -Math.PI / 2 }[h];
     }
-    drawLocomotive(x, y, h) {
+    drawLocomotive(x, y, h, roll = 0) {
         const ctx = this.ctx;
         const { left, top, size } = this.cellRect(x, y);
         const cx = left + size / 2;
         const cy = top + size / 2;
         if (this.assets?.has('loco')) {
-            this.assets.draw(ctx, 'loco', cx, cy, size * 0.92, size * 0.92, this.headingAngle(h));
+            this.assets.draw(ctx, 'loco', cx, cy, size * 0.92, size * 0.92, this.headingAngle(h) + roll);
             return;
         }
         ctx.save();
         ctx.translate(cx, cy);
-        ctx.rotate(this.headingAngle(h));
+        ctx.rotate(this.headingAngle(h) + roll);
         const w = size * 0.74;
         const hh = size * 0.5;
         // body

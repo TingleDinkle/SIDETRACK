@@ -1,10 +1,11 @@
 import { DELTA, OPPOSITE, edgeList, hasEdge } from '../types.js';
 import { exitEdge } from '../track.js';
-export function tracePath(grid, start) {
-    const path = [{ x: start.x, y: start.y }];
+export function tracePath(grid, start, wagons = []) {
+    const cells = [{ x: start.x, y: start.y }];
     let x = start.x;
     let y = start.y;
     let h = start.heading;
+    let outcome = 'derail';
     const seen = new Set();
     const cap = grid.cols * grid.rows * 3 + 8;
     for (let i = 0; i < cap; i++) {
@@ -25,26 +26,28 @@ export function tracePath(grid, start) {
         if (dest.type === 'exit') {
             if (!hasEdge(c.mask, dir))
                 break; // can't coast into the goal — needs a rail at its edge
-            path.push({ x: nx, y: ny });
+            cells.push({ x: nx, y: ny });
+            outcome = 'exit';
             break;
         }
         if (dest.type === 'tunnel') {
             const pair = grid.cells.find((o) => o !== dest && o.type === 'tunnel' && o.pairId === dest.pairId);
             const mouth = pair ? edgeList(pair.mask)[0] : undefined;
-            path.push({ x: nx, y: ny });
+            cells.push({ x: nx, y: ny });
             if (!pair || !mouth)
                 break; // unpaired tunnel — stop here
             x = pair.x;
             y = pair.y;
             h = mouth;
-            path.push({ x, y });
+            cells.push({ x, y });
             continue;
         }
         x = nx;
         y = ny;
         h = dir;
-        path.push({ x, y });
+        cells.push({ x, y });
     }
-    return path;
+    const pickups = wagons.filter((w) => cells.some((c) => c.x === w.x && c.y === w.y));
+    return { cells, outcome, pickups };
 }
 //# sourceMappingURL=pathpreview.js.map

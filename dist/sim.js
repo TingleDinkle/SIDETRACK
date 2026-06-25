@@ -318,6 +318,8 @@ export class Simulation {
         }
         if (btnColors.size || masterButton)
             this.events.push('button');
+        if (switchColors.size)
+            this.events.push('switch');
         for (const idx of flips)
             this.junctionActive.set(idx, ((this.junctionActive.get(idx) ?? 0) + 1) % 2);
         // Signals advance their phase every tick (unless held/frozen).

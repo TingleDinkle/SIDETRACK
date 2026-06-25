@@ -17,6 +17,7 @@ import { classify } from './track.js';
 import { AssetManager } from './assets.js';
 import { Shake } from './feel/shake.js';
 import { drawHeadlight } from './feel/lighting.js';
+import { Effects } from './feel/effects.js';
 
 // Calibration offsets for the baked track/coupler sprites (radians). Tuned so
 // the corner piece connects the right edges and couplers lie along the train.
@@ -36,6 +37,16 @@ export interface DrawEntity {
   scale?: number;
   /** A wagon coupled to the train recolours to the loco's blue. */
   coupled?: boolean;
+  /** Extra cosmetic tilt (radians) — the loco leans into a turn. */
+  roll?: number;
+}
+
+/** A planned-route telegraph for the editor: the path the train would roll, plus
+ *  whether it reaches the goal and where it would grab wagons. */
+export interface PreviewRoute {
+  cells: { x: number; y: number }[];
+  outcome: 'exit' | 'derail';
+  pickups: { x: number; y: number }[];
 }
 
 /** Live tile state during a run (gates open, signals green, junction branch).
@@ -68,7 +79,7 @@ const LINK_COLORS: Record<string, string> = {
   purple: '#9a6fc0',
   orange: '#e0883c',
 };
-const linkColor = (name?: string): string => (name ? (LINK_COLORS[name] ?? '#8a7a64') : '#8a7a64');
+export const linkColor = (name?: string): string => (name ? (LINK_COLORS[name] ?? '#8a7a64') : '#8a7a64');
 
 const PAL = {
   bg: '#ead9bb',
@@ -118,6 +129,7 @@ export class Renderer {
   private particles: Particle[] = [];
   private lastDrawMs = 0;
   private readonly shakeFx = new Shake();
+  private readonly fx = new Effects();
   private assets: AssetManager | null = null;
   private theme = 1; // world number, selects ground_w{theme}
 
@@ -197,12 +209,23 @@ export class Renderer {
     this.shakeFx.kick(intensity);
   }
 
+  /** World-reaction effects — fired from sim events (gate clunk, button link, …). */
+  fxRing(cellX: number, cellY: number, color: string, tMs: number): void {
+    this.fx.ring(cellX, cellY, color, tMs);
+  }
+  fxLink(ax: number, ay: number, bx: number, by: number, color: string, tMs: number): void {
+    this.fx.pulse(ax, ay, bx, by, color, tMs);
+  }
+  fxWhoosh(cellX: number, cellY: number, color: string, tMs: number): void {
+    this.fx.whoosh(cellX, cellY, color, tMs);
+  }
+
   draw(
     grid: Grid,
     entities: DrawEntity[],
     dyn: DynamicState | null = null,
     tMs = 0,
-    preview?: { x: number; y: number }[],
+    preview?: PreviewRoute,
   ): void {
     const ctx = this.ctx;
     const { cssW, cssH } = this.layout;
@@ -231,7 +254,7 @@ export class Renderer {
     for (const c of grid.cells) this.drawTileMarker(c, grid, dyn, 'object');
 
     // Planned-route telegraph (editing only): where the train will roll.
-    if (preview && preview.length > 1) this.drawPreview(preview, tMs);
+    if (preview && preview.cells.length > 1) this.drawPreview(preview, tMs);
 
     // Warm headlight pool under the loco for the dark-mine mood.
     const loco = entities.find((e) => e.kind === 'loco');
@@ -245,19 +268,27 @@ export class Renderer {
     for (const e of entities) if (e.kind === 'wagon' || e.kind === 'mover') this.drawEntity(e);
     for (const e of entities) if (e.kind === 'loco') this.drawEntity(e);
 
+    // World-reaction flashes (gate clunk, button→gate link, teleport) over the board.
+    this.fx.draw(ctx, this.layout.ox, this.layout.oy, this.layout.cell, tMs);
     this.drawParticles(tMs);
     ctx.restore();
 
     this.drawVignette();
   }
 
-  /** Dashed, marching route telegraph through cell centres toward the goal. */
-  private drawPreview(cells: { x: number; y: number }[], tMs: number): void {
+  /** Dashed, marching route telegraph: green to the goal, red (with an ✕) if it
+   *  would derail, plus amber rings where it would grab wagons. */
+  private drawPreview(route: PreviewRoute, tMs: number): void {
+    const { cells, outcome, pickups } = route;
     const { ox, oy, cell } = this.layout;
     const ctx = this.ctx;
     const px = (c: { x: number; y: number }): [number, number] => [ox + (c.x + 0.5) * cell, oy + (c.y + 0.5) * cell];
+    const ok = outcome === 'exit';
+    const line = ok ? 'rgba(126,208,154,0.55)' : 'rgba(214,108,84,0.6)';
+    const mark = ok ? 'rgba(126,208,154,0.75)' : 'rgba(214,108,84,0.85)';
+
     ctx.save();
-    ctx.strokeStyle = 'rgba(126,208,154,0.5)';
+    ctx.strokeStyle = line;
     ctx.lineWidth = Math.max(2, cell * 0.06);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -270,13 +301,36 @@ export class Renderer {
       else ctx.moveTo(x, y);
     });
     ctx.stroke();
-    // a soft dot where the route ends (exit reached, or where it would derail)
     ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(126,208,154,0.65)';
+
+    // Pickup markers — rings where the route grabs a wagon.
+    ctx.strokeStyle = 'rgba(245,210,140,0.9)';
+    ctx.lineWidth = Math.max(1.5, cell * 0.04);
+    for (const p of pickups) {
+      const [x, y] = px(p);
+      ctx.beginPath();
+      ctx.arc(x, y, cell * 0.22, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // End marker: a filled dot at the goal, or an ✕ where it derails.
     const [ex, ey] = px(cells[cells.length - 1]);
-    ctx.beginPath();
-    ctx.arc(ex, ey, cell * 0.08, 0, Math.PI * 2);
-    ctx.fill();
+    if (ok) {
+      ctx.fillStyle = mark;
+      ctx.beginPath();
+      ctx.arc(ex, ey, cell * 0.1, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = mark;
+      ctx.lineWidth = Math.max(2, cell * 0.06);
+      const r = cell * 0.12;
+      ctx.beginPath();
+      ctx.moveTo(ex - r, ey - r);
+      ctx.lineTo(ex + r, ey + r);
+      ctx.moveTo(ex + r, ey - r);
+      ctx.lineTo(ex - r, ey + r);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -439,7 +493,7 @@ export class Renderer {
   private drawEntity(e: DrawEntity): void {
     switch (e.kind) {
       case 'loco':
-        this.drawLocomotive(e.x, e.y, e.heading);
+        this.drawLocomotive(e.x, e.y, e.heading, e.roll ?? 0);
         break;
       case 'wagon':
         this.drawWagon(e.x, e.y, e.number ?? 0, e.heading, e.coupled ?? false);
@@ -1140,18 +1194,18 @@ export class Renderer {
     return { E: 0, S: Math.PI / 2, W: Math.PI, N: -Math.PI / 2 }[h];
   }
 
-  private drawLocomotive(x: number, y: number, h: Heading): void {
+  private drawLocomotive(x: number, y: number, h: Heading, roll = 0): void {
     const ctx = this.ctx;
     const { left, top, size } = this.cellRect(x, y);
     const cx = left + size / 2;
     const cy = top + size / 2;
     if (this.assets?.has('loco')) {
-      this.assets.draw(ctx, 'loco', cx, cy, size * 0.92, size * 0.92, this.headingAngle(h));
+      this.assets.draw(ctx, 'loco', cx, cy, size * 0.92, size * 0.92, this.headingAngle(h) + roll);
       return;
     }
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(this.headingAngle(h));
+    ctx.rotate(this.headingAngle(h) + roll);
     const w = size * 0.74;
     const hh = size * 0.5;
     // body
