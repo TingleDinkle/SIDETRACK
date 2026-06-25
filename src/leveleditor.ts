@@ -962,19 +962,9 @@ export class LevelManager {
     if (ta === 'no' || tb === 'no') return;
     if (ta === 'lay') this.addTrackEdge(a.x, a.y, h);
     if (tb === 'lay') this.addTrackEdge(b.x, b.y, OPPOSITE[h]);
-    // A tunnel you connect track to turns its mouth to face that track, so the
-    // machine lines up with the rail even when it was placed before the track.
-    this.faceTunnel(a.x, a.y, h);
-    this.faceTunnel(b.x, b.y, OPPOSITE[h]);
+    // Tunnels keep a fixed orientation — they carry the train straight through,
+    // so laying track against one no longer spins it to face the rail.
     this.rebuildTrackTiles();
-  }
-  /** Point a tunnel at (x,y) toward `dir` (the cell the track connects from). */
-  private faceTunnel(x: number, y: number, dir: Heading): void {
-    const t = this.level?.fixedTiles.find((t) => t.type === 'tunnel' && t.x === x && t.y === y);
-    if (t) {
-      t.edges = [dir];
-      delete t.mask;
-    }
   }
   private addTrackEdge(x: number, y: number, h: Heading): void {
     const key = `${x},${y}`;

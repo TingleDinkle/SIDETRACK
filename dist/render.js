@@ -10,7 +10,7 @@
  * The renderer owns the screen↔grid mapping (`layout`) so input and rendering
  * always agree on where a cell is.
  */
-import { EdgeBit, OPPOSITE, edgeList, hasEdge } from './types.js';
+import { EdgeBit, edgeList } from './types.js';
 import { classify } from './track.js';
 import { Shake } from './feel/shake.js';
 import { drawHeadlight } from './feel/lighting.js';
@@ -781,7 +781,7 @@ export class Renderer {
                 this.drawStartPad(c.x, c.y);
                 break;
             case 'tunnel':
-                this.drawTunnel(c, grid);
+                this.drawTunnel(c);
                 break;
             case 'button':
                 this.drawButton(c);
@@ -1046,30 +1046,20 @@ export class Renderer {
         ctx.stroke();
         ctx.restore();
     }
-    /** The edge a tunnel's machine should face: the side a neighbouring rail
-     *  connects on (so the train visibly enters/leaves through it), falling back
-     *  to the cell's authored mouth. Purely cosmetic — tunnels carry the train
-     *  straight through regardless of orientation. */
-    tunnelFacing(c, grid) {
-        for (const h of ['W', 'E', 'N', 'S']) {
-            const nb = grid.neighbor(c.x, c.y, h);
-            if (nb && nb.type !== 'tunnel' && hasEdge(nb.mask, OPPOSITE[h]))
-                return h;
-        }
-        return edgeList(c.mask)[0] ?? 'W';
-    }
     /**
      * A tunnel = the machine model. Baked with its opening facing West; we turn it
-     * to face the connecting rail: mirrored for an East side (keeps it upright) and
-     * quarter-turned for N/S.
+     * to its authored mouth (mirrored for East to stay upright, quarter-turned for
+     * N/S). The orientation is FIXED — it never spins as track is laid against it,
+     * since tunnels carry the train straight through regardless of which way they
+     * face.
      */
-    drawTunnel(c, grid) {
+    drawTunnel(c) {
         const ctx = this.ctx;
         const { left, top, size } = this.cellRect(c.x, c.y);
         const cx = left + size / 2;
         const cy = top + size / 2;
         if (this.assets && this.assets.has('tile_tunnel')) {
-            const mouth = this.tunnelFacing(c, grid);
+            const mouth = edgeList(c.mask)[0] ?? 'W';
             this.contactShadow(cx, cy, size);
             ctx.save();
             ctx.translate(cx, cy);
