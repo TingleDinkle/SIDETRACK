@@ -27,7 +27,7 @@
 
 import { Grid } from './grid.js';
 import { Level } from './level.js';
-import { Cell, DELTA, Heading, OPPOSITE, edgeList, hasEdge } from './types.js';
+import { Cell, DELTA, Heading, OPPOSITE, edgeList } from './types.js';
 import { classify, exitEdge } from './track.js';
 
 export type SimStatus = 'running' | 'won' | 'lost';
@@ -120,14 +120,20 @@ export class Simulation {
     const c = this.grid.get(x, y);
     if (!c) return null;
     if (c.type === 'start' || c.type === 'tunnel') return heading; // launch / emerge in facing direction
-    return exitEdge(c.mask, OPPOSITE[heading], this.junctionActive.get(this.grid.idx(x, y)) ?? 0);
+    // The rail redirects the train when it connects from the entry edge; otherwise
+    // the train simply carries straight on. Track guides motion, it doesn't gate it
+    // — a rail only has to reach the cell edge for the train to roll into the next
+    // cell in the same direction.
+    return exitEdge(c.mask, OPPOSITE[heading], this.junctionActive.get(this.grid.idx(x, y)) ?? 0) ?? heading;
   }
 
-  private canEnter(x: number, y: number, dir: Heading): boolean {
+  /** A cell the train may roll into: anything on the board that isn't a rock. No
+   *  matching back-edge is required — the previous cell's rail reaching the shared
+   *  edge is enough. (Gates/signals still hold via isBlocked; coupling is separate.) */
+  private canEnter(x: number, y: number): boolean {
     const c = this.grid.get(x, y);
-    if (!c) return false;
-    if (c.type === 'rock') return false;
-    return hasEdge(c.mask, OPPOSITE[dir]);
+    if (!c) return false; // off the board
+    return c.type !== 'rock';
   }
 
   /** A closed gate or closed signal holds an entering unit. */
@@ -164,7 +170,7 @@ export class Simulation {
     if (dir === null) return { kind: 'derail' };
     const rawX = x + DELTA[dir].dx;
     const rawY = y + DELTA[dir].dy;
-    if (!this.canEnter(rawX, rawY, dir)) return { kind: 'derail' };
+    if (!this.canEnter(rawX, rawY)) return { kind: 'derail' };
     if (this.isBlocked(rawX, rawY)) return { kind: 'wait' };
     const tp = this.teleport(rawX, rawY);
     return {

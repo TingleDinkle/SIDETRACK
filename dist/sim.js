@@ -24,7 +24,7 @@
  *                    alternating-junction pass-flip.
  *   6) Win / lose  — loco on exit with all wagons coupled = WIN; incomplete = FAIL.
  */
-import { DELTA, OPPOSITE, edgeList, hasEdge } from './types.js';
+import { DELTA, OPPOSITE, edgeList } from './types.js';
 import { classify, exitEdge } from './track.js';
 export class Simulation {
     constructor(grid, level, held = new Set()) {
@@ -72,15 +72,20 @@ export class Simulation {
             return null;
         if (c.type === 'start' || c.type === 'tunnel')
             return heading; // launch / emerge in facing direction
-        return exitEdge(c.mask, OPPOSITE[heading], this.junctionActive.get(this.grid.idx(x, y)) ?? 0);
+        // The rail redirects the train when it connects from the entry edge; otherwise
+        // the train simply carries straight on. Track guides motion, it doesn't gate it
+        // — a rail only has to reach the cell edge for the train to roll into the next
+        // cell in the same direction.
+        return exitEdge(c.mask, OPPOSITE[heading], this.junctionActive.get(this.grid.idx(x, y)) ?? 0) ?? heading;
     }
-    canEnter(x, y, dir) {
+    /** A cell the train may roll into: anything on the board that isn't a rock. No
+     *  matching back-edge is required — the previous cell's rail reaching the shared
+     *  edge is enough. (Gates/signals still hold via isBlocked; coupling is separate.) */
+    canEnter(x, y) {
         const c = this.grid.get(x, y);
         if (!c)
-            return false;
-        if (c.type === 'rock')
-            return false;
-        return hasEdge(c.mask, OPPOSITE[dir]);
+            return false; // off the board
+        return c.type !== 'rock';
     }
     /** A closed gate or closed signal holds an entering unit. */
     isBlocked(x, y) {
@@ -120,7 +125,7 @@ export class Simulation {
             return { kind: 'derail' };
         const rawX = x + DELTA[dir].dx;
         const rawY = y + DELTA[dir].dy;
-        if (!this.canEnter(rawX, rawY, dir))
+        if (!this.canEnter(rawX, rawY))
             return { kind: 'derail' };
         if (this.isBlocked(rawX, rawY))
             return { kind: 'wait' };
