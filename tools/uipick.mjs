@@ -37,6 +37,13 @@ const PICKS = [
   { a: 1, i: 62, name: 'countbox' },
   { a: 1, i: 67, name: 'ic_close' },
   { a: 1, i: 68, name: 'ic_back' },
+  { a: 1, i: 3, name: 'ic_calendar' }, // Levels nav tab
+  { a: 1, i: 17, name: 'ic_on' },      // green round on-button (settings)
+  { a: 1, i: 30, name: 'ic_off' },     // red round off-button (settings)
+  { a: 1, i: 19, name: 'ic_coin' },    // gold coin (currency)
+  { a: 1, i: 28, name: 'ic_gem' },     // pink gem (currency)
+  { a: 1, i: 0, name: 'ic_shop' },     // shop awning (nav)
+  { a: 1, i: 1, name: 'ic_mail' },     // gift/inbox (daily nav)
 ];
 
 const [s1, s2, uiDir, montageOut] = process.argv.slice(2);

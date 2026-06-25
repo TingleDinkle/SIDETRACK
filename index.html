@@ -25,20 +25,26 @@
         --ink-soft: #9aa7c6;
         --accent: #ffce3a;
         --accent-press: #e0a72e;
+        --orange: #f79a25;
         --danger: #e0563f;
         --go: #57c065;
         --title-font: 'Grobold', 'Arial Black', 'Segoe UI', system-ui, sans-serif;
+        /* white fill + dark outline — the punchy kit headline look */
+        --outline: 2.5px rgba(8, 16, 34, 0.6);
       }
       * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
       html, body {
         margin: 0; height: 100%; overflow: hidden;
-        background: radial-gradient(120% 80% at 50% 0%, #283150 0%, var(--bg) 60%, #161a27 100%);
+        background: radial-gradient(120% 80% at 50% 0%, #2a3358 0%, var(--bg) 58%, #141826 100%);
         color: var(--ink);
         font-family: 'Oswald', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
         user-select: none; -webkit-user-select: none; touch-action: none;
       }
       body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
       #app { display: flex; flex-direction: column; height: 100%; max-width: 760px; margin: 0 auto; }
+
+      /* outlined headline helper (white fill, dark stroke) */
+      .outline { color: #fff; -webkit-text-stroke: var(--outline); paint-order: stroke fill; text-shadow: 0 3px 0 rgba(0, 0, 0, 0.25); }
 
       /* ---- 9-slice sprite chrome (from the UI kit atlases) ---- */
       .s9 { border-style: solid; border-color: transparent; background: transparent; }
@@ -60,22 +66,24 @@
       .s-orange { color: #3a2a00; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3); }
       .s-field  { color: #1a2436; text-shadow: none; }
 
-      /* ---- header ---- */
+      /* ---- header (play view) ---- */
       header {
         flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
-        padding: 8px 10px; padding-top: calc(8px + env(safe-area-inset-top));
+        padding: 8px 12px; padding-top: calc(8px + env(safe-area-inset-top));
+        background: linear-gradient(#212b46, #1a2236);
+        border-bottom: 2px solid rgba(0, 0, 0, 0.28); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.32); z-index: 5;
       }
       #level-name {
-        flex: 0 1 auto; min-width: 0; /* allow shrink so ellipsis fires, keeping budget visible */
+        flex: 0 1 auto; min-width: 0;
         font-family: var(--title-font); font-weight: 400; font-size: 19px;
-        color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); letter-spacing: 0.4px;
+        color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4); letter-spacing: 0.4px;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
       .spacer { flex: 1 1 auto; }
       .budget {
         display: inline-flex; align-items: center; gap: 4px; min-height: 40px;
         padding: 0 6px; font-size: 14px; font-weight: 700; color: #fff;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
       }
       .budget b { font-size: 18px; font-weight: 700; }
       .budget.over { filter: hue-rotate(-35deg) saturate(1.5) brightness(1.05); }
@@ -96,9 +104,9 @@
       }
       button:active { transform: translateY(2px); filter: brightness(0.93); }
       button:disabled { filter: grayscale(0.55) brightness(0.85); opacity: 0.5; cursor: default; transform: none; }
-      /* default chrome = navy; gated on the .s9 marker (icon/booster carry their
-         own sprite) so ls-/ed- class names can never collide via substring. */
-      button:not(.s9):not(.icon):not(.booster) {
+      /* :where() keeps this at specificity (0,0,1) so ANY component button class
+         (.ls-cell, .social-badge, future ones) overrides it without a :not() pile. */
+      button:not(:where(.s9, .icon, .booster, .navtab, .ls-cell, .social-badge)) {
         border-width: 18px; border-image: url('assets/ui/btn_navy.png') 40 fill / 18px stretch;
       }
       button.icon { min-width: 50px; padding: 0; font-size: 20px; line-height: 1; }
@@ -112,7 +120,7 @@
         position: absolute; left: 50%; bottom: 16px; transform: translate(-50%, 16px);
         background: rgba(16, 20, 32, 0.94); color: #fff; font-size: 14px; font-weight: 600;
         padding: 9px 18px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.12);
-        opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease;
+        opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease; z-index: 9;
       }
       #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
@@ -137,8 +145,7 @@
       .booster .bcount {
         position: absolute; top: -10px; right: -10px;
         background: var(--accent); color: #3a2a00; font-size: 11px; font-weight: 800; line-height: 1;
-        border-radius: 999px; padding: 3px 6px; border: 2px solid #1b2030;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+        border-radius: 999px; padding: 3px 6px; border: 2px solid #1b2030; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
       }
 
       /* ---- footer (action bar) ---- */
@@ -146,13 +153,13 @@
         flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px;
         padding: 8px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom));
       }
-      footer #btn-play { flex: 1 0 100%; order: -1; }     /* hero Play on its own top row */
-      footer button:not(#btn-play) { flex: 1 1 auto; }    /* controls share the row below */
+      footer #btn-play { flex: 1 0 100%; order: -1; }
+      footer button:not(#btn-play) { flex: 1 1 auto; }
 
       /* ---- outcome overlay ---- */
       #outcome {
         position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
-        background: rgba(10, 14, 24, 0.55); backdrop-filter: blur(3px); padding: 20px;
+        background: rgba(10, 14, 24, 0.55); backdrop-filter: blur(3px); padding: 20px; z-index: 8;
       }
       #outcome.show { display: flex; }
       #outcome .card {
@@ -176,53 +183,265 @@
       #outcome .row { display: flex; gap: 8px; justify-content: center; }
       #outcome .row button { flex: 1 1 0; min-height: 52px; }
 
-      /* ---- level select ---- */
-      #levelselect {
+      /* ============================================================ *
+       *  META SHELL — full-screen menu screens + bottom tab nav
+       * ============================================================ */
+      .metascreen {
         position: fixed; inset: 0; z-index: 20; overflow-y: auto; display: none; flex-direction: column;
-        background: radial-gradient(120% 80% at 50% 0%, #283150 0%, var(--bg) 60%, #161a27 100%);
+        background: radial-gradient(120% 80% at 50% 0%, #2a3358 0%, var(--bg) 58%, #141826 100%);
+        padding-top: calc(60px + env(safe-area-inset-top)); /* clear the fixed currency bar */
+        padding-bottom: calc(96px + env(safe-area-inset-bottom)); /* clear the fixed nav (incl. raised center tab) */
       }
-      #levelselect.show { display: flex; }
-      .ls-head {
+      .metascreen.show { display: flex; }
+      /* the kit-style top bar shared by meta screens */
+      .meta-top {
         position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px;
-        padding: 12px 14px; padding-top: calc(12px + env(safe-area-inset-top));
-        background: linear-gradient(#1b2030ee, #1b2030cc); backdrop-filter: blur(4px);
+        padding: 12px 16px; padding-top: calc(12px + env(safe-area-inset-top));
+        background: linear-gradient(#212b46f2, #1a2236e6); backdrop-filter: blur(5px);
+        border-bottom: 2px solid rgba(0, 0, 0, 0.3); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
       }
-      .ls-head h1 {
-        margin: 0; font-family: var(--title-font); font-weight: 400; font-size: 24px; color: #fff;
-        text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); letter-spacing: 0.5px;
+      .meta-logo { margin: 0; font-family: var(--title-font); font-weight: 400; font-size: 24px; letter-spacing: 0.6px; }
+      .prog-pill {
+        display: inline-flex; align-items: center; gap: 5px; min-height: 40px; padding: 0 8px 0 4px;
+        color: #fff; font-weight: 800; font-size: 16px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
       }
-      .ls-progress { flex: 1; color: var(--ink-soft); font-size: 14px; font-weight: 600; }
-      #ls-worlds { max-width: 760px; width: 100%; margin: 0 auto; padding: 8px 16px 40px; }
-      .ls-world { margin-top: 18px; }
+      .prog-pill .pill-ic { width: 26px; height: 26px; }
+      .meta-body { max-width: 760px; width: 100%; margin: 0 auto; padding: 12px 16px 24px; }
+
+      /* ---- level select grid ---- */
+      .ls-world { margin-top: 16px; }
       .ls-world h2 {
         margin: 0 0 3px; font-family: var(--title-font); font-weight: 400; font-size: 18px;
-        color: var(--accent); text-shadow: 0 2px 0 rgba(0, 0, 0, 0.3); letter-spacing: 0.3px;
+        color: var(--accent); text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); letter-spacing: 0.3px;
       }
       .ls-world p { margin: 0 0 12px; font-size: 13px; color: var(--ink-soft); }
-      .ls-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px; }
+      .ls-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; }
       .ls-cell {
-        position: relative; text-align: left; min-height: 74px; cursor: pointer; color: #eaf4ff;
-        padding: 6px 10px 8px; border-style: solid; border-color: transparent; border-width: 22px;
-        border-image: url('assets/ui/panel_blue.png') 120 fill / 22px stretch;
-        display: flex; flex-direction: column; justify-content: center;
+        position: relative; min-height: 92px; cursor: pointer;
+        border-style: solid; border-color: transparent; border-width: 24px;
+        border-image: url('assets/ui/panel_blue.png') 120 fill / 24px stretch;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+        text-align: center; transition: transform 0.05s ease, filter 0.1s ease;
+      }
+      .ls-cell:active { transform: translateY(2px); filter: brightness(0.96); }
+      .ls-cell.done { border-image: url('assets/ui/panel_cyan.png') 120 fill / 24px stretch; }
+      .ls-cell .num {
+        font-family: var(--title-font); font-size: 30px; line-height: 1; color: #fff;
+        -webkit-text-stroke: var(--outline); paint-order: stroke fill; text-shadow: 0 3px 0 rgba(0, 0, 0, 0.3);
+      }
+      .ls-cell .nm {
+        font-size: 11.5px; font-weight: 700; color: #fff; letter-spacing: 0.2px; line-height: 1.15;
+        -webkit-text-stroke: 0.6px rgba(8, 16, 34, 0.55); paint-order: stroke fill; /* legible white on blue AND cyan */
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+        max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .ls-cell .tick {
+        position: absolute; top: -6px; right: -6px; width: 30px; height: 30px;
+        background: url('assets/ui/ic_check.png') center/contain no-repeat;
+        filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.45)); font-size: 0;
+      }
+      .ls-cell .best {
+        display: inline-block; font-size: 11px; color: #fff; font-weight: 700; margin-top: 2px;
+        background: rgba(10, 30, 18, 0.4); border-radius: 999px; padding: 1px 8px;
+        text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+      }
+
+      /* ---- bottom tab nav ---- */
+      #metanav {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: none;
+        justify-content: space-around; align-items: flex-end; gap: 2px;
+        padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+        padding-left: calc(6px + env(safe-area-inset-left)); padding-right: calc(6px + env(safe-area-inset-right));
+        background: linear-gradient(#222c48, #161d30); border-top: 2px solid rgba(255, 255, 255, 0.06);
+        box-shadow: 0 -3px 14px rgba(0, 0, 0, 0.4);
+      }
+      #metanav.show { display: flex; }
+      .navtab {
+        flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 2px;
+        background: transparent; border: none; padding: 2px; cursor: pointer;
+        color: #93a4ca; font-family: 'Oswald', sans-serif; font-size: 10px; font-weight: 700;
+        letter-spacing: 0.3px; text-transform: uppercase; text-shadow: none;
+      }
+      .navtab .navicon-wrap {
+        width: 50px; height: 38px; display: flex; align-items: center; justify-content: center; border-radius: 13px;
+        transition: background 0.12s ease, transform 0.1s ease;
+      }
+      .navtab .navicon { width: 28px; height: 28px; opacity: 0.85; }
+      .navtab .navglyph { font-size: 22px; color: #c3cfe8; line-height: 1; }
+      .navtab.center .navicon-wrap { width: 58px; height: 44px; }
+      .navtab.center .navicon { width: 34px; height: 34px; }
+      .navtab:active .navicon-wrap { transform: translateY(2px); }
+      .navtab.active { color: #fff; }
+      .navtab.active .navicon-wrap {
+        background: linear-gradient(#ffb43a, var(--orange));
+        box-shadow: 0 3px 8px rgba(247, 154, 37, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+      }
+      .navtab.active .navicon { opacity: 1; }
+      .navtab.active .navglyph { color: #fff; }
+
+      /* ---- settings + stats panels ---- */
+      .set-row {
+        display: flex; align-items: center; gap: 12px; min-height: 56px; margin-bottom: 12px;
+        padding: 0 18px; color: #fff;
+        border-style: solid; border-color: transparent; border-width: 20px;
+        border-image: url('assets/ui/btn_navy.png') 40 fill / 20px stretch;
+      }
+      .set-row .set-label { flex: 1; font-size: 15px; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+      .set-row .set-sub { font-size: 11px; color: #b9c6e6; font-weight: 500; }
+      /* slider rows (Sound / Music / Vibration) */
+      .slider-row {
+        display: flex; align-items: center; gap: 14px; min-height: 60px; margin-bottom: 12px; padding: 0 16px;
+        border-style: solid; border-color: transparent; border-width: 18px;
+        border-image: url('assets/ui/btn_navy.png') 40 fill / 18px stretch;
+      }
+      .slider-ic {
+        flex: 0 0 auto; width: 42px; height: 42px; border-radius: 999px; font-size: 22px;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35), 0 2px 5px rgba(0, 0, 0, 0.4);
+      }
+      .slider-ic.snd { background: linear-gradient(#4ccb5e, #2f9e44); }
+      .slider-ic.mus { background: linear-gradient(#e6604a, #b23a2a); }
+      .slider-ic.vib { background: linear-gradient(#3f93d8, #2a6fb0); }
+      input[type='range'].sld {
+        -webkit-appearance: none; appearance: none; flex: 1 1 auto; min-height: 44px; height: 44px;
+        background: transparent; outline: none; cursor: pointer; /* 44px touch target; track is on the pseudo */
+      }
+      input[type='range'].sld::-webkit-slider-runnable-track { height: 16px; border-radius: 999px; background: #15306a; box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5); }
+      input[type='range'].sld::-moz-range-track { height: 16px; border-radius: 999px; background: #15306a; box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5); }
+      input[type='range'].sld::-webkit-slider-thumb {
+        -webkit-appearance: none; width: 28px; height: 28px; border-radius: 999px; margin-top: -6px; /* centre on the 16px track */
+        background: radial-gradient(circle at 35% 30%, #fff1b8, var(--accent) 58%, var(--accent-press));
+        border: 2px solid #b9851c; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.45); cursor: pointer;
+      }
+      input[type='range'].sld::-moz-range-thumb {
+        width: 28px; height: 28px; border-radius: 999px; border: 2px solid #b9851c;
+        background: radial-gradient(circle at 35% 30%, #fff1b8, var(--accent) 58%, var(--accent-press));
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.45); cursor: pointer;
+      }
+      /* Follow / Share badges */
+      .follow-row { display: flex; gap: 12px; justify-content: center; margin: 4px 0; }
+      .social-badge {
+        width: 54px; height: 54px; border-radius: 16px; border: none; cursor: pointer; color: #fff;
+        display: inline-flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700;
+        box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.3), 0 3px 6px rgba(0, 0, 0, 0.38);
         transition: transform 0.05s ease, filter 0.1s ease;
       }
-      .ls-cell:active { transform: translateY(2px); filter: brightness(0.94); }
-      .ls-cell.done { border-image: url('assets/ui/panel_cyan.png') 120 fill / 22px stretch; }
-      .ls-cell .num { font-family: var(--title-font); font-size: 20px; color: #fff; text-shadow: 0 2px 2px rgba(0, 0, 0, 0.45); }
-      .ls-cell .nm { display: block; font-size: 12px; color: #0a2540; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3); margin-top: 2px; font-weight: 600; }
-      .ls-cell .tick {
-        position: absolute; top: 6px; right: 8px; width: 22px; height: 22px;
-        background: url('assets/ui/ic_check.png') center/contain no-repeat; font-size: 0;
+      .social-badge:active { transform: translateY(2px); filter: brightness(0.92); }
+      .social-badge.share { background: linear-gradient(#7c5fc6, #5a3da4); }
+      .social-badge.src { background: linear-gradient(#33405e, #222b42); font-size: 17px; }
+      /* confirmation popup (matches the kit's Quit / No-Internet dialogs) */
+      #popup {
+        position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center;
+        background: rgba(10, 14, 24, 0.6); backdrop-filter: blur(3px); padding: 24px;
       }
-      .ls-cell .best { display: block; font-size: 11px; color: #5a3d00; margin-top: 4px; font-weight: 700; }
-      /* solved cells use the brighter cyan panel — darken the big number to stay legible */
-      .ls-cell.done .num { color: #0d2a3c; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4); }
-      .ls-cell.done .nm { color: #16384e; }
+      #popup.show { display: flex; }
+      #popup .pop-card {
+        position: relative; min-width: 268px; max-width: 340px; width: 100%; text-align: center;
+        padding: 6px 14px 18px; animation: pop 0.26s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+      }
+      .pop-title {
+        font-family: var(--title-font); font-size: 22px; color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+        margin: 0 auto 12px; min-height: 52px; display: flex; align-items: center; justify-content: center;
+      }
+      .pop-msg { color: #163a52; font-weight: 600; font-size: 15px; margin: 0 0 16px; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35); }
+      .pop-row { display: flex; gap: 10px; justify-content: center; }
+      .pop-row button { flex: 1 1 0; min-height: 50px; }
+      .set-section { margin: 18px 0 8px; font-family: var(--title-font); font-weight: 400; font-size: 17px; color: var(--accent); text-shadow: 0 2px 0 rgba(0, 0, 0, 0.3); }
+      .set-about { margin-top: 16px; font-size: 13px; color: var(--ink-soft); text-align: center; line-height: 1.5; }
+      #set-reset { min-height: 50px; }
+      .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .stat-card {
+        min-height: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+        border-style: solid; border-color: transparent; border-width: 28px;
+        border-image: url('assets/ui/panel_blue.png') 120 fill / 28px stretch;
+      }
+      .stat-card .stat-num { font-family: var(--title-font); font-size: 30px; color: #fff; -webkit-text-stroke: var(--outline); paint-order: stroke fill; text-shadow: 0 3px 0 rgba(0, 0, 0, 0.3); line-height: 1; }
+      .stat-card .stat-lbl { font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); text-transform: uppercase; letter-spacing: 0.3px; }
+      .stat-card.wide { grid-column: 1 / -1; min-height: 64px; flex-direction: row; gap: 10px; }
 
-      /* ---- level manager + editor (dev tool — themed, lighter touch) ---- */
+      /* ---- shared meta top bar (currency) ---- */
+      #metatop {
+        position: fixed; left: 0; right: 0; top: 0; z-index: 30; display: none; align-items: center; gap: 8px;
+        padding: 8px 12px; padding-top: calc(8px + env(safe-area-inset-top));
+        padding-left: calc(12px + env(safe-area-inset-left)); padding-right: calc(12px + env(safe-area-inset-right));
+        background: linear-gradient(#212b46, #1a2236); border-bottom: 2px solid rgba(0, 0, 0, 0.3); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.32);
+      }
+      #metatop.show { display: flex; }
+      .cur-pill {
+        display: inline-flex; align-items: center; gap: 5px; min-height: 42px; padding: 0 6px; cursor: pointer; color: #fff;
+        font-weight: 800; font-size: 15px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        border-style: solid; border-color: transparent; border-width: 13px 16px;
+        border-image: url('assets/ui/countbox.png') 30 34 fill / 13px 16px stretch;
+      }
+      .cur-pill:active { transform: translateY(1px); filter: brightness(0.95); }
+      .cur-pill img { width: 24px; height: 24px; }
+      .cur-pill .cur-plus {
+        width: 20px; height: 20px; border-radius: 999px; background: linear-gradient(#5ec06a, #3f9e4d);
+        color: #fff; font-weight: 800; font-size: 15px; line-height: 19px; text-align: center; margin-left: 3px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 1px 2px rgba(0, 0, 0, 0.35);
+      }
+      .meta-title { flex: 1; text-align: center; font-family: var(--title-font); font-size: 19px; color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .ls-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+
+      /* ---- shop rows ---- */
+      .shop-row {
+        display: flex; align-items: center; gap: 10px; min-height: 74px; margin-bottom: 12px; padding: 0 12px;
+        border-style: solid; border-color: transparent; border-width: 22px;
+        border-image: url('assets/ui/btn_navy.png') 40 fill / 22px stretch;
+      }
+      .shop-ic { flex: 0 0 auto; width: 46px; height: 46px; }
+      .shop-ic img { width: 46px; height: 46px; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4)); }
+      .shop-info { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+      .shop-info b { display: block; font-size: 15px; color: #fff; font-weight: 700; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .shop-info .shop-own { font-size: 12px; color: #b9c6e6; font-weight: 600; }
+      .buy {
+        flex: 0 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-height: 44px; min-width: 50px; padding: 0 2px;
+        color: #fff; font-weight: 800; font-size: 13px; cursor: pointer; background: transparent;
+        border-style: solid; border-color: transparent;
+        transition: transform 0.05s ease, filter 0.1s ease;
+      }
+      .buy img { width: 17px; height: 17px; }
+      .buy.coin { border-width: 0 16px; border-image: url('assets/ui/btn_green.png') 0 64 fill / 0 16px stretch; color: #0c2e08; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.28); }
+      .buy.gem { border-width: 16px; border-image: url('assets/ui/btn_navy.png') 40 fill / 16px stretch; }
+      .buy:active { transform: translateY(2px); filter: brightness(0.92); }
+      .buy:disabled { filter: grayscale(0.5) brightness(0.8); opacity: 0.55; cursor: default; }
+
+      /* ---- daily + scratch ---- */
+      .daily-head, .scratch-head { font-family: var(--title-font); font-size: 26px; color: #fff; text-align: center; margin: 4px 0 2px; }
+      .daily-sub { text-align: center; color: var(--ink-soft); font-size: 13px; margin: 0 0 14px; }
+      .daily-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      .day-card {
+        position: relative; min-height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+        border-style: solid; border-color: transparent; border-width: 20px;
+        border-image: url('assets/ui/panel_blue.png') 120 fill / 20px stretch; cursor: default;
+      }
+      .day-card.day7 { grid-column: 1 / -1; }
+      .day-card.claimable { border-image: url('assets/ui/panel_cyan.png') 120 fill / 20px stretch; cursor: pointer; animation: glow 1.2s ease-in-out infinite alternate; }
+      @keyframes glow { from { filter: brightness(1); } to { filter: brightness(1.14); } }
+      .day-card.claimed { filter: grayscale(0.45) brightness(0.78); }
+      .day-card .day-n, .day-card .day-rw { -webkit-text-stroke: 0.6px rgba(8, 16, 34, 0.55); paint-order: stroke fill; } /* legible white on cyan claimable card */
+      .day-card .day-n { font-size: 12px; font-weight: 800; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+      .day-card .day-rw { display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 2px; font-weight: 800; color: #fff; font-size: 13px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+      .day-card .day-rw img { width: 18px; height: 18px; }
+      .day-card .day-tick { position: absolute; top: -8px; right: -8px; width: 30px; height: 30px; background: url('assets/ui/ic_check.png') center/contain no-repeat; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.45)); }
+      .scratch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 340px; margin: 8px auto; }
+      .scr-card {
+        aspect-ratio: 3 / 4; border-radius: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative;
+        background: conic-gradient(from 0deg, #ff5d5d, #ffd24a, #5ec06a, #4aa3ff, #9a6fc0, #ff5d5d);
+        box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.5), 0 4px 8px rgba(0, 0, 0, 0.4);
+      }
+      .scr-card::after { content: '?'; font-family: var(--title-font); font-size: 46px; color: #fff; text-shadow: 0 3px 0 rgba(0, 0, 0, 0.3); }
+      .scr-card.revealed { background: linear-gradient(#1d2740, #141b2c); box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.2), 0 4px 8px rgba(0, 0, 0, 0.4); }
+      .scr-card.revealed::after { content: none; }
+      .scr-card.dim { filter: grayscale(0.6) brightness(0.7); cursor: default; }
+      .scr-reward { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #fff; font-weight: 800; font-size: 17px; text-shadow: 0 2px 2px rgba(0, 0, 0, 0.5); }
+      .scr-reward img { width: 44px; height: 44px; }
+      .scratch-note { text-align: center; color: var(--ink-soft); font-size: 13px; margin-top: 16px; }
+      #daily-scratch { display: block; margin: 18px auto 0; min-width: 210px; }
+
+      /* ---- level manager + editor (dev tool) ---- */
       #editor {
-        position: fixed; inset: 0; z-index: 25; background: var(--bg); display: none; flex-direction: column;
+        position: fixed; inset: 0; z-index: 35; background: var(--bg); display: none; flex-direction: column;
         padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); gap: 8px;
       }
       #editor.show { display: flex; }
@@ -271,24 +490,26 @@
       /* ---- muted state (the JS toggles .off on #btn-mute) ---- */
       #btn-mute.off { filter: grayscale(0.6) brightness(0.85); opacity: 0.78; }
 
-      /* ---- responsive: tighten spacing on very narrow phones (no border-image
-         resize, so 9-slice chrome stays crisp; the footer already wraps) ---- */
+      /* ---- responsive ---- */
       @media (max-width: 360px) {
         header, footer { gap: 6px; padding-left: 8px; padding-right: 8px; }
         #boosters { gap: 6px; }
         .booster { min-width: 66px; }
         #level-name { font-size: 17px; }
         button { font-size: 14px; }
+        .navtab { font-size: 9px; }
       }
-      /* short landscape: reclaim board height — hide the hint, scroll the boosters,
-         and keep the footer on one row. */
       @media (orientation: landscape) and (max-height: 480px) {
         .hint { display: none; }
         #boosters { flex-wrap: nowrap; overflow-x: auto; padding: 4px 8px 0; }
         footer { flex-wrap: nowrap; }
         footer #btn-play { flex: 1 1 auto; }
+        /* condense the meta shell so the grid/cards keep height */
+        .navtab .navicon-wrap { height: 30px; }
+        .navtab.center .navicon-wrap { height: 34px; }
+        #metanav { padding-top: 2px; }
+        .metascreen { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
       }
-      /* the level manager stacks its sidebar above the canvas on phones */
       @media (max-width: 560px) {
         .ed-body { flex-direction: column; }
         .ed-sidebar { flex: 0 0 auto; max-height: 30vh; }
@@ -298,11 +519,11 @@
   <body>
     <div id="app">
       <header>
-        <button class="icon" id="btn-levels" title="Level select">☰</button>
+        <button class="icon" id="btn-levels" title="Menu">☰</button>
         <span id="level-name">Sidetrack</span>
         <span class="spacer"></span>
-        <button class="icon" id="btn-mute" title="Sound on/off">🔊</button>
         <span class="budget s9 s-count" id="budget"><span class="blabel">Track</span><b id="budget-used">0</b>/<span id="budget-total">0</span></span>
+        <button class="icon" id="btn-mute" title="Sound on/off">🔊</button>
       </header>
 
       <main id="stage">
@@ -335,18 +556,86 @@
       </footer>
     </div>
 
-    <!-- Level select -->
-    <div id="levelselect">
-      <div class="ls-head">
-        <h1>Sidetrack</h1>
-        <span class="ls-progress" id="ls-progress"></span>
-        <button id="ls-editor">✎ Editor</button>
-        <button class="primary s9 s-green" id="ls-close">Close</button>
+    <!-- Level select (meta screen) -->
+    <div id="levelselect" class="metascreen">
+      <div class="meta-body">
+        <div class="ls-top">
+          <span class="prog-pill s9 s-count"><img class="pill-ic" src="assets/ui/ic_check.png" alt="" /><span id="ls-progress">0/0</span></span>
+        </div>
+        <div id="ls-worlds"></div>
       </div>
-      <div id="ls-worlds"></div>
     </div>
 
-    <!-- Level manager + editor -->
+    <!-- Shop (meta screen) -->
+    <div id="shop" class="metascreen">
+      <div class="meta-body">
+        <p class="daily-sub">Spend coins or gems on booster uses — earn them by solving levels, daily rewards and scratch cards.</p>
+        <div id="shop-body"></div>
+      </div>
+    </div>
+
+    <!-- Daily rewards (meta screen) -->
+    <div id="daily" class="metascreen">
+      <div class="meta-body">
+        <div class="daily-head outline">Daily Rewards</div>
+        <p class="daily-sub">Come back every day for a bigger bonus!</p>
+        <div class="daily-grid" id="daily-grid"></div>
+        <button class="s9 s-yellow" id="daily-scratch">🎟 Scratch &amp; Win</button>
+      </div>
+    </div>
+
+    <!-- Scratch & win (meta screen) -->
+    <div id="scratch" class="metascreen">
+      <div class="meta-body">
+        <div class="scratch-head outline">Scratch &amp; Win</div>
+        <p class="daily-sub">Scratch a card to reveal a prize — one free a day.</p>
+        <div class="scratch-grid" id="scratch-grid"></div>
+        <p class="scratch-note" id="scratch-note"></p>
+      </div>
+    </div>
+
+    <!-- Stats (meta screen) -->
+    <div id="stats" class="metascreen">
+      <div class="meta-body"><div id="stats-body"></div></div>
+    </div>
+
+    <!-- Settings (meta screen) -->
+    <div id="settings" class="metascreen">
+      <div class="meta-body">
+        <div class="set-section">Sound &amp; Music</div>
+        <div class="slider-row"><span class="slider-ic snd">🔊</span><input type="range" class="sld" id="snd-sound" min="0" max="100" value="50" aria-label="Sound volume" /></div>
+        <div class="slider-row"><span class="slider-ic mus">🎵</span><input type="range" class="sld" id="snd-music" min="0" max="100" value="60" aria-label="Music volume" /></div>
+        <div class="slider-row"><span class="slider-ic vib">📳</span><input type="range" class="sld" id="snd-haptics" min="0" max="1" step="1" value="1" aria-label="Vibration" /></div>
+        <div class="set-section">Follow &amp; Share</div>
+        <div class="follow-row">
+          <button class="social-badge share" id="set-share" title="Share Sidetrack">↗</button>
+          <button class="social-badge src" id="set-source" title="Source on GitHub">&lt;/&gt;</button>
+        </div>
+        <div class="set-section">More</div>
+        <div class="set-row"><span class="set-label">Statistics<span class="set-sub"> · your progress</span></span><button class="s9 s-navy" id="set-stats">View</button></div>
+        <div class="set-row"><span class="set-label">Level Editor<span class="set-sub"> · build &amp; edit levels</span></span><button class="s9 s-navy" id="set-editor">Open</button></div>
+        <div class="set-section">Progress</div>
+        <div class="set-row">
+          <span class="set-label">Reset all progress<span class="set-sub"> · clears solved levels</span></span>
+          <button class="s9 s-red" id="set-reset">Reset</button>
+        </div>
+        <p class="set-about">Sidetrack — a cozy train-shunting puzzle.<br />UI: 300MIND 2D Mobile Game UI Kit.</p>
+      </div>
+    </div>
+
+    <!-- Confirmation popup (styled, replaces window.confirm) -->
+    <div id="popup" role="dialog" aria-modal="true" aria-labelledby="pop-title">
+      <div class="pop-card s9 s-cyan">
+        <p class="pop-title s9 s-title" id="pop-title">Reset?</p>
+        <p class="pop-msg" id="pop-msg">Are you sure?</p>
+        <div class="pop-row">
+          <button class="s9 s-green" id="pop-yes">Yes</button>
+          <button class="s9 s-red" id="pop-no">No</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Level manager + editor (dev tool) -->
     <div id="editor">
       <div class="ed-top">
         <button id="ed-done">Done</button>
@@ -368,6 +657,22 @@
       </div>
       <textarea id="ed-json" spellcheck="false" placeholder="Export/import JSON here — Export all dumps the whole library; paste a bundle and Import to replace it."></textarea>
     </div>
+
+    <!-- Shared currency top bar (shown on meta screens) -->
+    <div id="metatop">
+      <button class="cur-pill coin" id="cur-coins" title="Get coins"><img src="assets/ui/ic_coin.png" alt="coins" /><b id="coins-val">0</b><span class="cur-plus">+</span></button>
+      <span class="meta-title" id="meta-title">SIDETRACK</span>
+      <button class="cur-pill gem" id="cur-gems" title="Get gems"><img src="assets/ui/ic_gem.png" alt="gems" /><b id="gems-val">0</b><span class="cur-plus">+</span></button>
+    </div>
+
+    <!-- Bottom tab navigation (shown on meta screens) -->
+    <nav id="metanav">
+      <button class="navtab" id="nav-levels" data-tab="levels"><span class="navicon-wrap"><img class="navicon" src="assets/ui/ic_calendar.png" alt="" /></span>Levels</button>
+      <button class="navtab" id="nav-shop" data-tab="shop"><span class="navicon-wrap"><img class="navicon" src="assets/ui/ic_shop.png" alt="" /></span>Shop</button>
+      <button class="navtab center" id="nav-play" data-tab="play"><span class="navicon-wrap"><img class="navicon" src="assets/ui/ic_home.png" alt="" /></span>Play</button>
+      <button class="navtab" id="nav-daily" data-tab="daily"><span class="navicon-wrap"><img class="navicon" src="assets/ui/ic_mail.png" alt="" /></span>Daily</button>
+      <button class="navtab" id="nav-settings" data-tab="settings"><span class="navicon-wrap"><img class="navicon" src="assets/ui/ic_gear.png" alt="" /></span>Settings</button>
+    </nav>
 
     <script type="module" src="./dist/main.js"></script>
   </body>

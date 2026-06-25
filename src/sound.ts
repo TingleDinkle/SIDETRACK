@@ -28,6 +28,12 @@ export class AudioManager {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private ambient: { bed: GainNode; oscs: OscillatorNode[]; noise: AudioBufferSourceNode | null } | null = null;
+  private vol = 0.5; // master volume 0..1 (Sound slider)
+  private ambVol = 0.6; // ambience volume 0..1 (Music slider)
+
+  private clamp01(v: number): number {
+    return v < 0 ? 0 : v > 1 ? 1 : v;
+  }
 
   /** Lazily create the AudioContext (must follow a user gesture on most browsers). */
   private ensure(): AudioContext | null {
@@ -37,7 +43,7 @@ export class AudioManager {
         window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.ctx = new Ctor();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.5;
+      this.master.gain.value = this.enabled ? this.vol : 0.0001;
       this.master.connect(this.ctx.destination);
     } catch {
       this.ctx = null;
@@ -50,7 +56,27 @@ export class AudioManager {
     // Mute at the master so the ambient bed (a persistent node, not a play() blip)
     // is silenced too.
     if (this.master && this.ctx) {
-      this.master.gain.setTargetAtTime(on ? 0.5 : 0.0001, this.ctx.currentTime, 0.05);
+      this.master.gain.setTargetAtTime(on ? this.vol : 0.0001, this.ctx.currentTime, 0.05);
+    }
+  }
+
+  /** Master volume (Sound slider), 0..1. Honours the mute state. */
+  setVolume(v: number): void {
+    this.vol = this.clamp01(v);
+    const ctx = this.ensure();
+    if (ctx?.state === 'suspended') void ctx.resume();
+    if (this.master && ctx && this.enabled) {
+      this.master.gain.setTargetAtTime(this.vol, ctx.currentTime, 0.05);
+    }
+  }
+
+  /** Ambience/music volume (Music slider), 0..1. */
+  setAmbientVolume(v: number): void {
+    this.ambVol = this.clamp01(v);
+    const ctx = this.ensure();
+    if (ctx?.state === 'suspended') void ctx.resume();
+    if (this.ambient && ctx) {
+      this.ambient.bed.gain.setTargetAtTime(this.ambVol * 0.26, ctx.currentTime, 0.1);
     }
   }
 
@@ -65,7 +91,7 @@ export class AudioManager {
 
     const bed = ctx.createGain();
     bed.gain.setValueAtTime(0, t);
-    bed.gain.linearRampToValueAtTime(0.16, t + 2.5); // fade in
+    bed.gain.linearRampToValueAtTime(this.ambVol * 0.26, t + 2.5); // fade in to the Music-slider level
     bed.connect(this.master);
 
     // Low drone — a root + a detuned fifth + an octave-ish triangle.
@@ -183,7 +209,7 @@ export class AudioManager {
   }
 
   play(sfx: Sfx): void {
-    if (!this.enabled) return;
+    if (!this.enabled || this.vol <= 0) return; // muted or Sound slider at 0 — skip the SFX graph
     const ctx = this.ensure();
     if (!ctx) return;
     if (ctx.state === 'suspended') void ctx.resume();

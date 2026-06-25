@@ -12,6 +12,11 @@ export class AudioManager {
         this.ctx = null;
         this.master = null;
         this.ambient = null;
+        this.vol = 0.5; // master volume 0..1 (Sound slider)
+        this.ambVol = 0.6; // ambience volume 0..1 (Music slider)
+    }
+    clamp01(v) {
+        return v < 0 ? 0 : v > 1 ? 1 : v;
     }
     /** Lazily create the AudioContext (must follow a user gesture on most browsers). */
     ensure() {
@@ -21,7 +26,7 @@ export class AudioManager {
             const Ctor = window.AudioContext ?? window.webkitAudioContext;
             this.ctx = new Ctor();
             this.master = this.ctx.createGain();
-            this.master.gain.value = 0.5;
+            this.master.gain.value = this.enabled ? this.vol : 0.0001;
             this.master.connect(this.ctx.destination);
         }
         catch {
@@ -34,7 +39,27 @@ export class AudioManager {
         // Mute at the master so the ambient bed (a persistent node, not a play() blip)
         // is silenced too.
         if (this.master && this.ctx) {
-            this.master.gain.setTargetAtTime(on ? 0.5 : 0.0001, this.ctx.currentTime, 0.05);
+            this.master.gain.setTargetAtTime(on ? this.vol : 0.0001, this.ctx.currentTime, 0.05);
+        }
+    }
+    /** Master volume (Sound slider), 0..1. Honours the mute state. */
+    setVolume(v) {
+        this.vol = this.clamp01(v);
+        const ctx = this.ensure();
+        if (ctx?.state === 'suspended')
+            void ctx.resume();
+        if (this.master && ctx && this.enabled) {
+            this.master.gain.setTargetAtTime(this.vol, ctx.currentTime, 0.05);
+        }
+    }
+    /** Ambience/music volume (Music slider), 0..1. */
+    setAmbientVolume(v) {
+        this.ambVol = this.clamp01(v);
+        const ctx = this.ensure();
+        if (ctx?.state === 'suspended')
+            void ctx.resume();
+        if (this.ambient && ctx) {
+            this.ambient.bed.gain.setTargetAtTime(this.ambVol * 0.26, ctx.currentTime, 0.1);
         }
     }
     /** Start a soft, looping mine-ambience bed (low drone + filtered wind). Safe to
@@ -50,7 +75,7 @@ export class AudioManager {
         const t = ctx.currentTime;
         const bed = ctx.createGain();
         bed.gain.setValueAtTime(0, t);
-        bed.gain.linearRampToValueAtTime(0.16, t + 2.5); // fade in
+        bed.gain.linearRampToValueAtTime(this.ambVol * 0.26, t + 2.5); // fade in to the Music-slider level
         bed.connect(this.master);
         // Low drone — a root + a detuned fifth + an octave-ish triangle.
         const drone = ctx.createGain();
@@ -177,8 +202,8 @@ export class AudioManager {
         src.stop(start + dur + 0.02);
     }
     play(sfx) {
-        if (!this.enabled)
-            return;
+        if (!this.enabled || this.vol <= 0)
+            return; // muted or Sound slider at 0 — skip the SFX graph
         const ctx = this.ensure();
         if (!ctx)
             return;

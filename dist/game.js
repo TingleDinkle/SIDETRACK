@@ -96,16 +96,16 @@ export class Game {
             if (hit && !this.held.has(hit.key)) {
                 this.held.add(hit.key);
                 this.toast('Frozen ❄');
-                cb?.(true); // applied → spend the use
+                cb?.('freeze'); // spend the use
             }
             else if (hit) {
-                this.held.delete(hit.key); // tapping a frozen object un-freezes it (refunds)
+                this.held.delete(hit.key); // tapping a frozen object un-freezes it
                 this.toast('Un-frozen');
-                cb?.(false);
+                cb?.('unfreeze'); // refund the use
             }
             else {
                 this.toast('Cancelled');
-                cb?.(false);
+                cb?.('cancel');
             }
         };
         this.levels = levels;
@@ -181,7 +181,7 @@ export class Game {
                 this.audio.play('couple');
                 this.renderer.spawnBurst(s.loco.x, s.loco.y, '#ffe7a0', 12, this.now);
                 this.renderer.kick(0.12); // a little jolt as the wagon snaps on
-                navigator.vibrate?.(20);
+                this.buzz(20);
             }
             else if (ev === 'button') {
                 this.audio.play('button');
@@ -266,6 +266,16 @@ export class Game {
         }
         if (teleported)
             this.audio.play('teleport');
+    }
+    /** Fire a vibration unless the player disabled haptics in Settings. */
+    buzz(pattern) {
+        try {
+            if (localStorage.getItem('sidetrack.haptics') !== '0')
+                navigator.vibrate?.(pattern);
+        }
+        catch {
+            /* storage/vibrate unavailable */
+        }
     }
     dynState() {
         const s = this.sim;
@@ -379,7 +389,7 @@ export class Game {
         this.audio.play('crash');
         this.renderer.spawnDebris(s.loco.x, s.loco.y, this.now);
         this.renderer.kick(0.9);
-        navigator.vibrate?.(120);
+        this.buzz(120);
     }
     onSimEnded() {
         if (!this.sim)
@@ -394,7 +404,7 @@ export class Game {
             this.renderer.celebrate(goal.x, goal.y, this.now);
             this.renderer.spawnBurst(this.sim.loco.x, this.sim.loco.y, '#7ed09a', 22, this.now);
             this.renderer.kick(0.3);
-            navigator.vibrate?.([20, 40, 30]);
+            this.buzz([20, 40, 30]);
             if (this.onWin)
                 this.onWin(this.level.id, this.sim.ticks);
         }
@@ -569,22 +579,25 @@ export class Game {
         this.updateHud();
         this.toast(`+${n} track piece`);
     }
-    /** Boost: run Play at 2×. */
+    /** Boost: run Play at 2×. Returns false if already boosted (so no use is spent). */
     boost() {
+        if (this.speed === 2)
+            return false;
         this.speed = 2;
         this.updateControls();
         this.toast('Boost · 2× speed');
+        return true;
     }
     /** Hold: enter targeting to freeze one object (signal / gate / mover). The
-     *  callback reports whether a freeze was actually applied (to spend the use). */
+     *  callback reports freeze (spend a use) / unfreeze (refund) / cancel (no change). */
     beginHold(onResult) {
         if (this.holdTargeting) {
-            onResult(false);
+            onResult('cancel');
             return;
         }
         if (!this.holdableCells().length) {
             this.toast('Nothing to hold on this level');
-            onResult(false);
+            onResult('cancel');
             return;
         }
         this.holdTargeting = true;
@@ -600,7 +613,7 @@ export class Game {
         this.onHoldResult = null;
         if (this.state === 'editing')
             this.input.setEnabled(true);
-        cb?.(false);
+        cb?.('cancel');
     }
     /** Cells of objects that can be frozen: movers, signals, gates. */
     holdableCells() {
