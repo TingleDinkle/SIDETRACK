@@ -55,14 +55,20 @@
   - `function resolveTarget(target: StepTarget, grid: Grid, level: Level): { x: number; y: number }[]`
   - `class Tutorial` with: `start(script, grid, level): void`, `active(): boolean`, `next(): boolean` (false when finished — and it auto-ends), `end(): void`, `cells(): {x,y}[]`, `text(): string`, `stepInfo(): { index: number; total: number }` (1-based), `isLast(): boolean`.
 
-- [ ] **Step 1: Write the failing tests** — append to `src/selftest.ts` immediately before the `/* ----------------------------- report ----------------------------- */` line near the end of the file:
+- [ ] **Step 1: Write the failing tests**
+
+First add these imports alongside the existing imports at the top of `src/selftest.ts` (e.g. after the `import { validateLevel } from './levelValidate.js';` line):
+
+```ts
+import { buildGrid } from './level.js';
+import { resolveTarget, Tutorial } from './tutorial.js';
+```
+
+Then append this test section to `src/selftest.ts` immediately before the `/* ----------------------------- report ----------------------------- */` line near the end of the file:
 
 ```ts
 /* ----------------------------- tutorial ----------------------------- */
 {
-  const { resolveTarget, Tutorial } = await import('./tutorial.js');
-  const { buildGrid } = await import('./level.js');
-
   // A tiny level with one rock, one wagon, one mover, an exit, a tunnel pair.
   const lv = {
     id: 't-1',
@@ -80,7 +86,7 @@
     wagons: [{ x: 3, y: 1, number: 1 }],
     movers: [{ x: 4, y: 2, heading: 'N' }],
     objectives: { couple: 'all-in-order', passengers: 0 },
-  } as unknown as import('./level.js').Level;
+  } as unknown as Level;
   const g = buildGrid(lv);
 
   eq('resolveTarget tile rock', resolveTarget({ tile: 'rock' }, g, lv), [{ x: 2, y: 0 }]);
@@ -115,7 +121,7 @@
 }
 ```
 
-Note: this section uses top-level `await import(...)`. `selftest.ts` is an ES module so `await` at top level is valid. The surrounding `eq`/`ok` helpers already exist in the file.
+Note: `tsconfig.json` is `module/target: ES2020`, so **top-level `await` is not allowed** (TS1378) — use the static imports above, never `await import(...)`. The `Level` type and the `eq`/`ok` helpers already exist in the file. `buildGrid` is a value import (separate from the existing `import type { Level }`).
 
 - [ ] **Step 2: Build to verify it fails**
 
@@ -253,14 +259,21 @@ git commit -m "feat(tutorial): add Tutorial controller + step-target resolution"
 - Consumes: `TutorialScript` from `./tutorial.js`; `LEVEL_LIBRARY` from `./levelData.js`; `buildGrid` from `./level.js`; `resolveTarget` from `./tutorial.js`.
 - Produces (used by Task 4): `export const TUTORIALS: Record<string, TutorialScript>` — keys `1-2`, `1-3`, `2-1`, `3-1`, `4-1`, `4-3`.
 
-- [ ] **Step 1: Write the failing test** — append inside the tutorial `{ ... }` block in `src/selftest.ts`, just before its closing `}`:
+- [ ] **Step 1: Write the failing test**
+
+First add these imports at the top of `src/selftest.ts` (next to the Task 1 tutorial imports):
+
+```ts
+import { TUTORIALS } from './tutorialData.js';
+import { LEVEL_LIBRARY } from './levelData.js';
+```
+
+Then append this block inside the tutorial `{ ... }` section (added in Task 1) in `src/selftest.ts`, just before that section's closing `}`:
 
 ```ts
   // Authored scripts: every key is a real level, and every non-explicit target
   // resolves to at least one cell on that level.
   {
-    const { TUTORIALS } = await import('./tutorialData.js');
-    const { LEVEL_LIBRARY } = await import('./levelData.js');
     const byId = new Map(LEVEL_LIBRARY.map((l) => [l.id, l]));
     for (const [id, script] of Object.entries(TUTORIALS)) {
       const level = byId.get(id);
