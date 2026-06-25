@@ -668,10 +668,11 @@ export class Renderer {
   }
 
   private drawTrack(c: Cell, grid: Grid, dyn: DynamicState | null): void {
-    // The start and exit show no interior rail: the player's track already
-    // reaches the shared boundary, so a stub here would just cross over into the
-    // pad. Let the rail stop exactly on the pad's edge (start matches exit).
-    if (c.type === 'start' || c.type === 'exit') return;
+    // The start, exit, and tunnel show no separate periwinkle rail: the start/exit
+    // pads let the player's track reach their edge, and the tunnel's own machine
+    // sprite is its rail. A stub here would just cross over / disagree with the
+    // sprite. Let those tiles render without an interior stub.
+    if (c.type === 'start' || c.type === 'exit' || c.type === 'tunnel') return;
     const { left, top, size } = this.cellRect(c.x, c.y);
     const cx = left + size / 2;
     const cy = top + size / 2;
