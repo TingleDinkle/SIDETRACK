@@ -69,6 +69,7 @@ export class Renderer {
         this.fx = new Effects();
         this.assets = null;
         this.theme = 1; // world number, selects ground_w{theme}
+        this.hoverCell = null; // editor targeting reticle
         this.canvas = canvas;
         const ctx = canvas.getContext('2d');
         if (!ctx)
@@ -134,6 +135,11 @@ export class Renderer {
         const { ox, oy, cell } = this.layout;
         return { left: ox + x * cell, top: oy + y * cell, size: cell };
     }
+    /** A stable pseudo-random 0..1 from a cell's coords (normalised cellHash) —
+     *  for cosmetic variety (rock shape/rotation) that must NOT flicker. */
+    cellRand(x, y) {
+        return this.cellHash(x, y) / 4294967296;
+    }
     /* ----------------------------- frame ----------------------------- */
     /** Add a screen-shake impulse (~0.3 gentle, ~0.9 crash). */
     kick(intensity) {
@@ -148,6 +154,10 @@ export class Renderer {
     }
     fxWhoosh(cellX, cellY, color, tMs) {
         this.fx.whoosh(cellX, cellY, color, tMs);
+    }
+    /** Set (or clear) the editor hover reticle — the cell a tap would target. */
+    setHover(cell) {
+        this.hoverCell = cell;
     }
     draw(grid, entities, dyn = null, tMs = 0, preview) {
         const ctx = this.ctx;
@@ -174,7 +184,10 @@ export class Renderer {
         // 3-D objects (rock/tunnel/gate/signal) go OVER the rails.
         for (const c of grid.cells)
             this.drawTileMarker(c, grid, dyn, 'object');
-        // Planned-route telegraph (editing only): where the train will roll.
+        // Editing-only (preview is supplied only while editing): a soft reticle on
+        // the cell under the cursor, then the planned-route telegraph.
+        if (preview)
+            this.drawHover(grid, tMs);
         if (preview && preview.cells.length > 1)
             this.drawPreview(preview, tMs);
         // Warm headlight pool under the loco for the dark-mine mood.
@@ -238,6 +251,15 @@ export class Renderer {
         // End marker: a filled dot at the goal, or an ✕ where it derails.
         const [ex, ey] = px(cells[cells.length - 1]);
         if (ok) {
+            // Inviting pulse on the goal — a soft ring that breathes outward, plus a dot.
+            const pulse = ((tMs * 0.0016) % 1 + 1) % 1; // 0..1, march-safe
+            ctx.globalAlpha = (1 - pulse) * 0.55;
+            ctx.strokeStyle = mark;
+            ctx.lineWidth = Math.max(1.5, cell * 0.05);
+            ctx.beginPath();
+            ctx.arc(ex, ey, cell * (0.14 + pulse * 0.32), 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
             ctx.fillStyle = mark;
             ctx.beginPath();
             ctx.arc(ex, ey, cell * 0.1, 0, Math.PI * 2);
@@ -254,6 +276,28 @@ export class Renderer {
             ctx.lineTo(ex - r, ey + r);
             ctx.stroke();
         }
+        ctx.restore();
+    }
+    /** A gentle reticle on the hovered cell so the player sees what a tap targets.
+     *  Skipped for rocks / off-board (nothing to lay or erase there). */
+    drawHover(grid, tMs) {
+        const h = this.hoverCell;
+        if (!h)
+            return;
+        const c = grid.get(h.x, h.y);
+        if (!c || c.type === 'rock')
+            return;
+        const { left, top, size } = this.cellRect(h.x, h.y);
+        const ctx = this.ctx;
+        const breath = 0.5 + 0.5 * Math.sin(tMs * 0.005);
+        ctx.save();
+        ctx.fillStyle = `rgba(255,248,228,${0.07 + 0.05 * breath})`;
+        this.roundRect(left + size * 0.08, top + size * 0.08, size * 0.84, size * 0.84, size * 0.16);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(255,240,200,${0.4 + 0.2 * breath})`;
+        ctx.lineWidth = Math.max(1, size * 0.025);
+        this.roundRect(left + size * 0.08, top + size * 0.08, size * 0.84, size * 0.84, size * 0.16);
+        ctx.stroke();
         ctx.restore();
     }
     /** Soft darkening toward the edges for depth (works with or without art). */
@@ -375,6 +419,50 @@ export class Renderer {
                 grav: 0.0006,
             });
         }
+    }
+    /** A small soft dust poof — the "pop" when a track piece is erased. */
+    spawnPoof(cellX, cellY, tMs) {
+        for (let i = 0; i < 7; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const sp = 0.3 + Math.random() * 0.7;
+            this.particles.push({
+                cx: cellX + 0.5,
+                cy: cellY + 0.5,
+                vx: Math.cos(a) * sp,
+                vy: Math.sin(a) * sp * 0.6 - 0.2,
+                born: tMs,
+                life: 260 + Math.random() * 180,
+                color: 'rgba(150,135,110,0.5)',
+                r0: 0.08 + Math.random() * 0.06,
+                grav: 0.0008,
+            });
+        }
+    }
+    /** Victory confetti: bright fluttering flakes that arc up and rain down. */
+    spawnConfetti(cellX, cellY, tMs, count = 34) {
+        const cols = ['#7ed09a', '#f3d35a', '#e0883c', '#5f82c8', '#d2553f', '#9a6fc0'];
+        for (let i = 0; i < count; i++) {
+            const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.1; // mostly upward fan
+            const sp = 1.4 + Math.random() * 2.6;
+            this.particles.push({
+                cx: cellX + 0.5,
+                cy: cellY + 0.5,
+                vx: Math.cos(a) * sp,
+                vy: Math.sin(a) * sp,
+                born: tMs,
+                life: 900 + Math.random() * 700,
+                color: cols[i % cols.length],
+                r0: 0.05 + Math.random() * 0.05,
+                grav: 0.0042,
+            });
+        }
+    }
+    /** Full victory flourish at the goal: expanding rings + a confetti shower. */
+    celebrate(cellX, cellY, tMs) {
+        this.fx.ring(cellX, cellY, '#7ed09a', tMs, 520, 1.4);
+        this.fx.ring(cellX, cellY, '#f3d35a', tMs + 90, 560, 1.9);
+        this.fx.ring(cellX, cellY, '#ffffff', tMs + 180, 460, 1.2);
+        this.spawnConfetti(cellX, cellY, tMs);
     }
     drawParticles(tMs) {
         if (!this.particles.length) {
@@ -636,13 +724,25 @@ export class Renderer {
                 const exits = edges.filter((e) => e !== branch); // the alternating pair (bar ends)
                 const live = exits[branchIdx % exits.length];
                 if (live) {
-                    const lm = this.edgeMid(left, top, size, live);
+                    // A filled arrowhead pointing down the currently live exit — reads at a
+                    // glance which way a train will be sent (vs. the old ambiguous dot).
                     const ctx = this.ctx;
+                    const col = c.color ? linkColor(c.color) : PAL.startMark;
+                    const a = size * 0.15;
                     ctx.save();
-                    ctx.fillStyle = c.color ? linkColor(c.color) : PAL.startMark;
+                    ctx.translate(cx, cy);
+                    ctx.rotate(this.headingAngle(live));
+                    ctx.translate(a * 0.55, 0); // nudge toward the live edge
+                    ctx.fillStyle = col;
                     ctx.beginPath();
-                    ctx.arc(cx + (lm.x - cx) * 0.45, cy + (lm.y - cy) * 0.45, size * 0.08, 0, Math.PI * 2);
+                    ctx.moveTo(a, 0);
+                    ctx.lineTo(-a * 0.55, a * 0.72);
+                    ctx.lineTo(-a * 0.55, -a * 0.72);
+                    ctx.closePath();
                     ctx.fill();
+                    ctx.lineWidth = Math.max(1, size * 0.02);
+                    ctx.strokeStyle = 'rgba(20,18,28,0.4)';
+                    ctx.stroke();
                     ctx.restore();
                 }
                 break;
@@ -806,7 +906,10 @@ export class Renderer {
     /** Sprite name + rotation + shadow flag for a fixed tile (null if none). */
     tileSpriteFor(c, grid, dyn) {
         switch (c.type) {
-            case 'rock': return { name: 'tile_rock', rot: 0, shadow: true };
+            case 'rock':
+                // Quarter-turn the rock per cell so a field of them doesn't read as a
+                // repeated stamp. Deterministic, so it never flickers.
+                return { name: 'tile_rock', rot: Math.floor(this.cellRand(c.x, c.y) * 4) * (Math.PI / 2), shadow: true };
             case 'exit': return { name: 'tile_exit', rot: 0, shadow: false };
             case 'start': return { name: 'tile_start', rot: 0, shadow: false };
             // buttons are drawn by drawButton (colour-tinted small vs neutral master)
@@ -920,6 +1023,10 @@ export class Renderer {
         const cy = top + size / 2;
         const col = linkColor(c.color);
         const horizontal = (c.mask & 2 || c.mask & 8) !== 0; // track runs E/W -> bar is vertical
+        // Open → lay a soft green "clear lane" glow down the travel axis so an open
+        // gate reads as unmistakably passable (more than just a ghosted barrier).
+        if (open)
+            this.gateClearGlow(cx, cy, size, horizontal);
         if (this.assets && this.assets.has('tile_gate')) {
             // Barrier is baked vertical (blocks E/W); turn it a quarter for N/S track.
             const rot = horizontal ? 0 : Math.PI / 2;
@@ -958,6 +1065,25 @@ export class Renderer {
         }
         ctx.restore();
     }
+    /** A soft green lane down the travel axis — the "this gate is open, roll through"
+     *  cue. `horizontal` means the track runs E/W, so the lane runs left↔right. */
+    gateClearGlow(cx, cy, size, horizontal) {
+        const ctx = this.ctx;
+        ctx.save();
+        const g = horizontal
+            ? ctx.createLinearGradient(cx - size * 0.5, cy, cx + size * 0.5, cy)
+            : ctx.createLinearGradient(cx, cy - size * 0.5, cx, cy + size * 0.5);
+        g.addColorStop(0, 'rgba(120,210,150,0)');
+        g.addColorStop(0.5, 'rgba(120,210,150,0.42)');
+        g.addColorStop(1, 'rgba(120,210,150,0)');
+        ctx.fillStyle = g;
+        const t = size * 0.32; // lane thickness
+        if (horizontal)
+            ctx.fillRect(cx - size * 0.5, cy - t / 2, size, t);
+        else
+            ctx.fillRect(cx - t / 2, cy - size * 0.5, t, size);
+        ctx.restore();
+    }
     /** A signal post with a green (open) / red (closed) light. */
     drawSignal(c, open) {
         const ctx = this.ctx;
@@ -982,17 +1108,24 @@ export class Renderer {
         const { left, top, size } = this.cellRect(x, y);
         const cx = left + size / 2;
         const cy = top + size / 2;
+        // Deterministic per-cell jitter so no two procedural rocks look identical.
+        const h1 = this.cellRand(x, y);
+        const h2 = this.cellRand(x * 3 + 1, y * 7 + 2);
+        const w = 0.66 + h1 * 0.12; // body footprint (fraction of the cell)
+        const ht = 0.58 + h2 * 0.12;
+        const bx = left + size * (0.5 - w / 2) + (h2 - 0.5) * size * 0.05;
+        const by = top + size * (0.52 - ht / 2);
         ctx.save();
         ctx.fillStyle = PAL.rockShadow;
-        this.roundRect(left + size * 0.16, top + size * 0.24, size * 0.7, size * 0.62, size * 0.18);
+        this.roundRect(bx + size * 0.02, by + size * 0.08, size * w, size * ht, size * 0.18);
         ctx.fill();
         ctx.fillStyle = PAL.rock;
-        this.roundRect(left + size * 0.14, top + size * 0.16, size * 0.72, size * 0.64, size * 0.2);
+        this.roundRect(bx, by, size * w, size * ht, size * 0.2);
         ctx.fill();
         ctx.fillStyle = PAL.rockHi;
         ctx.beginPath();
-        ctx.arc(cx - size * 0.1, cy - size * 0.08, size * 0.12, 0, Math.PI * 2);
-        ctx.arc(cx + size * 0.13, cy + size * 0.02, size * 0.08, 0, Math.PI * 2);
+        ctx.arc(cx - size * 0.1 + (h1 - 0.5) * size * 0.08, cy - size * 0.08 + (h2 - 0.5) * size * 0.06, size * (0.1 + h1 * 0.05), 0, Math.PI * 2);
+        ctx.arc(cx + size * 0.12 + (h2 - 0.5) * size * 0.06, cy + size * 0.03, size * (0.06 + h2 * 0.04), 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     }
@@ -1058,7 +1191,7 @@ export class Renderer {
         const cx = left + size / 2;
         const cy = top + size / 2;
         if (this.assets && this.assets.has('tile_tunnel')) {
-            const mouth = tunnelExitDir(grid, c) ?? 'W';
+            const mouth = (edgeList(c.mask)[0] ?? tunnelExitDir(grid, c)) ?? 'W';
             this.contactShadow(cx, cy, size);
             ctx.save();
             ctx.translate(cx, cy);

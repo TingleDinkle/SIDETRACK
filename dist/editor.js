@@ -34,6 +34,10 @@ function isConnectableFixed(cell) {
 }
 export class Editor {
     constructor(grid, budget) {
+        /** Cosmetic hooks (sound / particles). Fired on a real change to one cell;
+         *  set by the Game. Kept out of the edit logic so the editor stays pure. */
+        this.onLay = null;
+        this.onErase = null;
         this.undoStack = [];
         this.redoStack = [];
         this.strokeOpen = false;
@@ -151,8 +155,10 @@ export class Editor {
                 changed = true;
             }
         }
-        if (changed)
+        if (changed) {
             this.strokeDirty = true;
+            this.onLay?.(bx, by);
+        }
         return changed;
     }
     /** Erase a player-placed track cell, pruning dangling edges on neighbours. */
@@ -171,6 +177,7 @@ export class Editor {
             }
         }
         this.strokeDirty = true;
+        this.onErase?.(x, y);
         return true;
     }
     /** Remove all player track (used by Reset while editing). One undo step. */

@@ -189,11 +189,15 @@ export class AudioManager {
     if (ctx.state === 'suspended') void ctx.resume();
     const t = ctx.currentTime;
     switch (sfx) {
-      case 'lay':
-        this.note(520, t, 0.05, 'triangle', 0.18);
+      case 'lay': {
+        // a soft wooden "tok"; pitch-jittered so a dragged run ratchets pleasantly
+        const j = (Math.random() - 0.5) * 90;
+        this.note(500 + j, t, 0.045, 'triangle', 0.16);
         break;
+      }
       case 'erase':
         this.note(300, t, 0.06, 'triangle', 0.16);
+        this.note(190, t + 0.02, 0.05, 'sine', 0.1); // a little "thunk" of removal
         break;
       case 'start':
         this.note(160, t, 0.12, 'sawtooth', 0.2);

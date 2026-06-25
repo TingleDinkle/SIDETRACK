@@ -19,7 +19,7 @@ import { DrawEntity, DynamicState, Renderer, linkColor } from './render.js';
 import { Simulation } from './sim.js';
 import { AudioManager } from './sound.js';
 import { DELTA, Heading } from './types.js';
-import { easeFrac, MotionPhase } from './feel/motion.js';
+import { easeFrac, idleBreath, MotionPhase } from './feel/motion.js';
 import { tracePath } from './feel/pathpreview.js';
 
 export type GameState = 'editing' | 'running' | 'paused' | 'won' | 'lost';
@@ -109,6 +109,13 @@ export class Game {
     this.level = level;
     this.grid = buildGrid(level);
     this.editor = new Editor(this.grid, level.trackBudget);
+    // Tactile editing feedback: a soft click as each rail goes down, a duller
+    // click + a dust poof as one is erased.
+    this.editor.onLay = () => this.audio.play('lay');
+    this.editor.onErase = (x, y) => {
+      this.audio.play('erase');
+      this.renderer.spawnPoof(x, y, this.now);
+    };
     this.sim = null;
     this.state = 'editing';
     this.acc = 0;
@@ -302,12 +309,13 @@ export class Game {
       dx === 0 && dy === 0 ? fb : Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N';
     if (this.sim) {
       const s = this.sim;
-      // Cosmetic life: a chug-bob (≈one bob per tick) and a lean into curves,
-      // only while the train is actually rolling.
+      // Cosmetic life: a chug-bob (≈one bob per tick) while rolling, otherwise a
+      // slow idle "breath" so a stopped/parked train still feels alive.
       const cruising = this.state === 'running' && s.status === 'running';
-      const bob = cruising ? Math.sin(this.now * 0.017) * 0.022 : 0;
+      const bob = cruising ? Math.sin(this.now * 0.017) * 0.022 : idleBreath(this.now);
       this.updateLocoRoll(cruising ? s.loco.heading : undefined);
-      for (const w of s.free) out.push({ kind: 'wagon', x: w.x, y: w.y, heading: w.heading, number: w.number });
+      for (const w of s.free)
+        out.push({ kind: 'wagon', x: w.x, y: w.y + idleBreath(this.now, 0.6), heading: w.heading, number: w.number });
       const lp = pos(s.loco.px, s.loco.py, s.loco.x, s.loco.y);
       lp.y += bob;
       const chain: { x: number; y: number }[] = [lp]; // front-to-back train positions
@@ -341,9 +349,10 @@ export class Game {
       }
     } else {
       const L = this.level;
-      for (const w of L.wagons ?? []) out.push({ kind: 'wagon', x: w.x, y: w.y, heading: w.heading ?? 'E', number: w.number });
+      const br = idleBreath(this.now);
+      for (const w of L.wagons ?? []) out.push({ kind: 'wagon', x: w.x, y: w.y + br * 0.6, heading: w.heading ?? 'E', number: w.number });
       for (const m of L.movers ?? []) out.push({ kind: 'mover', x: m.x, y: m.y, heading: m.heading });
-      out.push({ kind: 'loco', x: L.locomotive.x, y: L.locomotive.y, heading: L.locomotive.heading });
+      out.push({ kind: 'loco', x: L.locomotive.x, y: L.locomotive.y + br, heading: L.locomotive.heading });
     }
     return out;
   }
@@ -395,6 +404,9 @@ export class Game {
     if (won) {
       this.audio.play('win');
       this.audio.play('whistle');
+      // Celebrate at the goal (fall back to the loco if the exit isn't found).
+      const goal = this.grid.cells.find((c) => c.type === 'exit') ?? this.sim.loco;
+      this.renderer.celebrate(goal.x, goal.y, this.now);
       this.renderer.spawnBurst(this.sim.loco.x, this.sim.loco.y, '#7ed09a', 22, this.now);
       this.renderer.kick(0.3);
       navigator.vibrate?.([20, 40, 30]);

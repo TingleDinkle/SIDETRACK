@@ -21,4 +21,12 @@ export function easeFrac(rawFrac, phase) {
     const r = clamp01(rawFrac);
     return phase === 'launch' ? launchIn(r) : phase === 'settle' ? settleOut(r) : cruise(r);
 }
+/**
+ * A slow vertical "breath" (in cell units) for a parked train, so a stopped or
+ * pre-launch scene still feels alive. Much gentler and slower than the rolling
+ * chug-bob. `scale` trims the amplitude for trailing cars.
+ */
+export function idleBreath(nowMs, scale = 1) {
+    return Math.sin(nowMs * 0.0026) * 0.011 * scale;
+}
 //# sourceMappingURL=motion.js.map

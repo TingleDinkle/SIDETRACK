@@ -40,6 +40,11 @@ export class Editor {
   readonly grid: Grid;
   budget: number;
 
+  /** Cosmetic hooks (sound / particles). Fired on a real change to one cell;
+   *  set by the Game. Kept out of the edit logic so the editor stays pure. */
+  onLay: ((x: number, y: number) => void) | null = null;
+  onErase: ((x: number, y: number) => void) | null = null;
+
   private undoStack: EdgeMask[][] = [];
   private redoStack: EdgeMask[][] = [];
   private strokeOpen = false;
@@ -155,7 +160,10 @@ export class Editor {
         changed = true;
       }
     }
-    if (changed) this.strokeDirty = true;
+    if (changed) {
+      this.strokeDirty = true;
+      this.onLay?.(bx, by);
+    }
     return changed;
   }
 
@@ -174,6 +182,7 @@ export class Editor {
       }
     }
     this.strokeDirty = true;
+    this.onErase?.(x, y);
     return true;
   }
 

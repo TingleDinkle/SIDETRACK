@@ -41,8 +41,14 @@ export class InputController {
                 /* capture is best-effort */
             }
             this.editor.beginStroke();
+            this.renderer.setHover(null); // the active gesture is its own feedback
         };
         this.onMove = (e) => {
+            // No active gesture → just track the hover reticle (mouse/pen; touch has none).
+            if (this.activeId === null) {
+                this.renderer.setHover(this.enabled ? this.renderer.cellAt(e.clientX, e.clientY) : null);
+                return;
+            }
             if (e.pointerId !== this.activeId || !this.last)
                 return;
             e.preventDefault();
@@ -81,8 +87,14 @@ export class InputController {
                 return;
             this.cancelGesture();
         };
+        /** Cursor left the board → drop the hover reticle (unless mid-gesture). */
+        this.onLeave = () => {
+            if (this.activeId === null)
+                this.renderer.setHover(null);
+        };
         canvas.addEventListener('pointerdown', this.onDown, { passive: false });
         canvas.addEventListener('pointermove', this.onMove, { passive: false });
+        canvas.addEventListener('pointerleave', this.onLeave);
         // End/cancel are on window (the pointer is captured to the canvas, but a
         // release can still land anywhere). Explicit non-passive so preventDefault
         // is always honoured.
@@ -96,8 +108,10 @@ export class InputController {
     }
     setEnabled(on) {
         this.enabled = on;
-        if (!on)
+        if (!on) {
             this.cancelGesture();
+            this.renderer.setHover(null); // no reticle while the sim runs
+        }
     }
     cancelGesture() {
         if (this.activeId === null)
