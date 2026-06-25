@@ -235,24 +235,25 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
     eq('sim: coasting off the board derails', s.status, 'lost');
   }
 
-  // E2) the train coasts straight through empty cells to a straight-ahead exit -> win
+  // E2) coasting is fine mid-path, but the goal needs a rail meeting its edge -> win
+  {
+    const g = new Grid(5, 1);
+    start(g, 0, 0, 'E');
+    // (1,0),(2,0) left empty — the train coasts across the gap...
+    track(g, 3, 0, EdgeBit.W | EdgeBit.E); // ...then this last piece connects into the exit
+    exit(g, 4, 0, 'W');
+    const s = run(g, lvl(5, 1, { x: 0, y: 0, heading: 'E' }));
+    eq('sim: coasts across a gap, connects at the exit -> win', s.status, 'won');
+  }
+
+  // E3) the train cannot coast straight into the goal across a gap -> lose
   {
     const g = new Grid(4, 1);
     start(g, 0, 0, 'E');
-    // (1,0) and (2,0) left empty — no track needed on the straight
+    // no track meeting the exit's edge — the train rolls up to it but can't link in
     exit(g, 3, 0, 'W');
     const s = run(g, lvl(4, 1, { x: 0, y: 0, heading: 'E' }));
-    eq('sim: coasts straight through gaps to the exit', s.status, 'won');
-  }
-
-  // E3) a lone curve redirects the coasting train; straights need no track -> win
-  {
-    const g = new Grid(3, 3);
-    start(g, 0, 0, 'E');
-    track(g, 2, 0, EdgeBit.W | EdgeBit.S); // the only track: a curve that turns it south
-    exit(g, 2, 2, 'N');
-    const s = run(g, lvl(3, 3, { x: 0, y: 0, heading: 'E' }));
-    eq('sim: a lone curve steers the coasting train to the exit', s.status, 'won');
+    eq('sim: cannot coast into the goal without a connecting rail', s.status, 'lost');
   }
 
   // F) reach exit without coupling a required wagon -> lose

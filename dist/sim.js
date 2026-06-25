@@ -24,7 +24,7 @@
  *                    alternating-junction pass-flip.
  *   6) Win / lose  — loco on exit with all wagons coupled = WIN; incomplete = FAIL.
  */
-import { DELTA, OPPOSITE, edgeList } from './types.js';
+import { DELTA, OPPOSITE, edgeList, hasEdge } from './types.js';
 import { classify, exitEdge } from './track.js';
 export class Simulation {
     constructor(grid, level, held = new Set()) {
@@ -127,6 +127,14 @@ export class Simulation {
         const rawY = y + DELTA[dir].dy;
         if (!this.canEnter(rawX, rawY))
             return { kind: 'derail' };
+        // The goal must be entered through a rail that meets its edge — the train
+        // can't coast straight into the exit across a gap. (Everywhere else it coasts.)
+        const dest = this.grid.get(rawX, rawY);
+        if (dest && dest.type === 'exit') {
+            const srcMask = this.grid.get(x, y)?.mask ?? 0;
+            if (!hasEdge(srcMask, dir) || !hasEdge(dest.mask, OPPOSITE[dir]))
+                return { kind: 'derail' };
+        }
         if (this.isBlocked(rawX, rawY))
             return { kind: 'wait' };
         const tp = this.teleport(rawX, rawY);

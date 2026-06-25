@@ -27,7 +27,7 @@
 
 import { Grid } from './grid.js';
 import { Level } from './level.js';
-import { Cell, DELTA, Heading, OPPOSITE, edgeList } from './types.js';
+import { Cell, DELTA, Heading, OPPOSITE, edgeList, hasEdge } from './types.js';
 import { classify, exitEdge } from './track.js';
 
 export type SimStatus = 'running' | 'won' | 'lost';
@@ -171,6 +171,13 @@ export class Simulation {
     const rawX = x + DELTA[dir].dx;
     const rawY = y + DELTA[dir].dy;
     if (!this.canEnter(rawX, rawY)) return { kind: 'derail' };
+    // The goal must be entered through a rail that meets its edge — the train
+    // can't coast straight into the exit across a gap. (Everywhere else it coasts.)
+    const dest = this.grid.get(rawX, rawY);
+    if (dest && dest.type === 'exit') {
+      const srcMask = this.grid.get(x, y)?.mask ?? 0;
+      if (!hasEdge(srcMask, dir) || !hasEdge(dest.mask, OPPOSITE[dir])) return { kind: 'derail' };
+    }
     if (this.isBlocked(rawX, rawY)) return { kind: 'wait' };
     const tp = this.teleport(rawX, rawY);
     return {
