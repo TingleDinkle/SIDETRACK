@@ -54,6 +54,14 @@ async function boot(): Promise<void> {
       btnNext: el<HTMLButtonElement>('outcome-next'),
       btnEdit: el<HTMLButtonElement>('outcome-edit'),
     },
+    btnHelp: el<HTMLButtonElement>('btn-help'),
+    tutorial: {
+      panel: el('tutorial'),
+      text: el('tut-text'),
+      dots: el('tut-dots'),
+      btnSkip: el<HTMLButtonElement>('tut-skip'),
+      btnNext: el<HTMLButtonElement>('tut-next'),
+    },
   };
 
   const audio = new AudioManager();
@@ -280,6 +288,9 @@ async function boot(): Promise<void> {
   hud.btnStep.addEventListener('click', () => game.step());
   hud.btnSpeed.addEventListener('click', () => game.cycleSpeed());
 
+  hud.tutorial.btnNext.addEventListener('click', () => game.tutorialNext());
+  hud.tutorial.btnSkip.addEventListener('click', () => game.tutorialSkip());
+  hud.btnHelp.addEventListener('click', () => game.replayTutorial());
   hud.outcome.btnReplay.addEventListener('click', () => game.replay());
   hud.outcome.btnEdit.addEventListener('click', () => game.reset());
   hud.outcome.btnNext.addEventListener('click', () => {
@@ -444,6 +455,7 @@ async function boot(): Promise<void> {
     label.textContent = b.name;
     btn.append(count, cvs, label);
     btn.addEventListener('click', () => {
+      if (game.tutorialActive()) return; // boosters are inert while a tutorial is up
       if (economy.boosterCount(b.id) <= 0) {
         game.toast(`Out of ${b.name} — buy more in the Shop`);
         return;
