@@ -61,6 +61,7 @@ async function boot() {
     const statsEl = el('stats');
     const statsBody = el('stats-body');
     const metanav = el('metanav');
+    const homeEl = el('home');
     const shopEl = el('shop');
     const dailyEl = el('daily');
     const scratchEl = el('scratch');
@@ -213,27 +214,23 @@ async function boot() {
     /* ----- scratch & win: one free reveal per day ----- */
     const scratchGrid = el('scratch-grid');
     const scratchNote = el('scratch-note');
+    // Repeatable: each of the 4 cards can be scratched once; a fresh board on every
+    // visit (and on page refresh), so the player can keep scratching.
     const buildScratch = () => {
         scratchGrid.replaceChildren();
-        const can = economy.canScratch();
-        scratchNote.textContent = can ? 'Pick a card to reveal your prize!' : 'You already scratched today — come back tomorrow.';
-        let done = !can;
+        scratchNote.textContent = 'Scratch a card to reveal a prize!';
         for (let i = 0; i < 4; i++) {
             const card = document.createElement('div');
-            card.className = 'scr-card' + (can ? '' : ' dim');
+            card.className = 'scr-card';
+            let revealed = false;
             card.addEventListener('click', () => {
-                if (done)
+                if (revealed)
                     return;
+                revealed = true;
                 const reward = economy.scratch();
-                if (!reward)
-                    return;
-                done = true;
                 card.classList.add('revealed');
                 card.innerHTML = `<span class="scr-reward">${rewardInner(reward)}</span>`;
-                for (const other of Array.from(scratchGrid.children))
-                    if (other !== card)
-                        other.classList.add('dim');
-                scratchNote.textContent = `You won ${rewardText(reward)}! Come back tomorrow.`;
+                scratchNote.textContent = `You won ${rewardText(reward)}!`;
                 audio.play('win');
             });
             scratchGrid.appendChild(card);
@@ -305,19 +302,15 @@ async function boot() {
         openMenu('levels'); // rebuilds the select (and re-syncs game levels) from the store
     });
     const navBtns = Array.from(metanav.querySelectorAll('.navtab'));
-    const screens = { levels: selectEl, shop: shopEl, daily: dailyEl, scratch: scratchEl, stats: statsEl, settings: settingsEl };
-    const titles = { levels: 'LEVELS', shop: 'SHOP', daily: 'DAILY', scratch: 'SCRATCH', stats: 'STATS', settings: 'SETTINGS' };
+    const screens = { home: homeEl, levels: selectEl, shop: shopEl, daily: dailyEl, scratch: scratchEl, stats: statsEl, settings: settingsEl };
+    const titles = { home: 'SIDETRACK', levels: 'LEVELS', shop: 'SHOP', daily: 'DAILY', scratch: 'SCRATCH', stats: 'STATS', settings: 'SETTINGS' };
     const closeMenu = () => {
         for (const e of [...Object.values(screens), metatop, metanav])
             e.classList.remove('show');
         for (const b of navBtns)
             b.classList.remove('active');
     };
-    const openMenu = (tab = 'levels') => {
-        if (tab === 'play') {
-            closeMenu();
-            return;
-        }
+    const openMenu = (tab = 'home') => {
         if (tab === 'editor') {
             closeMenu();
             manager.open();
@@ -349,6 +342,7 @@ async function boot() {
     el('daily-scratch').addEventListener('click', () => openMenu('scratch'));
     el('cur-coins').addEventListener('click', () => openMenu('shop'));
     el('cur-gems').addEventListener('click', () => openMenu('shop'));
+    el('home-play').addEventListener('click', () => closeMenu()); // PLAY → drop onto the board
     // Settings sliders (persisted): Sound -> master volume, Music -> ambience,
     // Vibration -> haptics on/off (read by game.buzz()).
     const sndSound = el('snd-sound');
@@ -514,12 +508,11 @@ async function boot() {
             buildShop();
         if (dailyEl.classList.contains('show'))
             buildDaily();
-        if (scratchEl.classList.contains('show'))
-            buildScratch();
+        // (scratch isn't rebuilt here — that would wipe the just-revealed cards)
     };
     refreshBoosters();
     game.updateHud();
-    openMenu('levels'); // open the menu on first load
+    openMenu('home'); // land on the Home scene (Play + train) on first load
 }
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => void boot());

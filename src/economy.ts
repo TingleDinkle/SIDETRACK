@@ -23,7 +23,6 @@ interface Data {
   boosters: Record<BoosterId, number>;
   dailyDay: number; // last claimed day in the 7-day cycle (0 = none yet)
   lastDaily: string | null; // YYYY-MM-DD of the last daily claim
-  lastScratch: string | null; // YYYY-MM-DD of the last scratch
 }
 
 const fresh = (): Data => ({
@@ -32,7 +31,6 @@ const fresh = (): Data => ({
   boosters: { reverse: 2, track: 3, hold: 2, boost: 2 },
   dailyDay: 0,
   lastDaily: null,
-  lastScratch: null,
 });
 
 /** Coin / gem price to buy one use of each booster. */
@@ -168,13 +166,9 @@ export class Economy {
 
   /* --------------------------- scratch & win --------------------------- */
 
-  canScratch(): boolean {
-    return this.data.lastScratch !== this.today();
-  }
-  /** Reveal one daily scratch reward (random). Null if already scratched today. */
-  scratch(): Reward | null {
-    if (!this.canScratch()) return null;
-    this.data.lastScratch = this.today();
+  /** Reveal one scratch reward (random). Repeatable — the UI gives a fresh board
+   *  on every visit and on page refresh (no daily lock). */
+  scratch(): Reward {
     const roll = Math.random();
     let reward: Reward;
     if (roll < 0.55) reward = { coins: 25 + Math.floor(Math.random() * 6) * 25 }; // 25..150

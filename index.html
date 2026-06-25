@@ -257,8 +257,8 @@
       }
       #metanav.show { display: flex; }
       .navtab {
-        flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 2px;
-        background: transparent; border: none; padding: 2px; cursor: pointer;
+        position: relative; flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 2px;
+        background: transparent; border: none; padding: 4px 2px; cursor: pointer;
         color: #93a4ca; font-family: 'Oswald', sans-serif; font-size: 10px; font-weight: 700;
         letter-spacing: 0.3px; text-transform: uppercase; text-shadow: none;
       }
@@ -271,13 +271,16 @@
       .navtab.center .navicon-wrap { width: 58px; height: 44px; }
       .navtab.center .navicon { width: 34px; height: 34px; }
       .navtab:active .navicon-wrap { transform: translateY(2px); }
-      .navtab.active { color: #fff; }
-      .navtab.active .navicon-wrap {
-        background: linear-gradient(#ffb43a, var(--orange));
-        box-shadow: 0 3px 8px rgba(247, 154, 37, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+      /* active tab = full gold block (the real kit yellow button, behind the icon+label) */
+      .navtab.active { color: #3a2a00; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35); }
+      .navtab.active::before {
+        content: ''; position: absolute; inset: 2px; z-index: -1;
+        border-style: solid; border-color: transparent; border-width: 14px;
+        border-image: url('assets/ui/btn_yellow.png') 46 fill / 14px stretch;
       }
+      .navtab.active .navicon-wrap { background: none; box-shadow: none; transform: none; }
       .navtab.active .navicon { opacity: 1; }
-      .navtab.active .navglyph { color: #fff; }
+      .navtab.active .navglyph { color: #3a2a00; }
 
       /* ---- settings + stats panels ---- */
       .set-row {
@@ -382,6 +385,12 @@
       }
       .meta-title { flex: 1; text-align: center; font-family: var(--title-font); font-size: 19px; color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .ls-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+
+      /* ---- home screen (landing scene + Play) ---- */
+      #home { align-items: center; }
+      .home-scene { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; width: 100%; padding: 6px 18px; min-height: 0; }
+      .home-img { max-width: 100%; max-height: 100%; border-radius: 18px; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), inset 0 0 0 3px rgba(255, 255, 255, 0.06); }
+      .home-play { align-self: center; margin: 6px auto 12px; min-width: 240px; min-height: 64px; font-size: 23px; letter-spacing: 1px; }
 
       /* ---- shop rows ---- */
       .shop-row {
@@ -556,6 +565,12 @@
       </footer>
     </div>
 
+    <!-- Home (landing scene + Play) -->
+    <div id="home" class="metascreen">
+      <div class="home-scene"><img class="home-img" src="assets/home-scene.svg" alt="A little blue train in a cozy mine" /></div>
+      <button class="s9 s-yellow big home-play" id="home-play">▶ PLAY</button>
+    </div>
+
     <!-- Level select (meta screen) -->
     <div id="levelselect" class="metascreen">
       <div class="meta-body">
@@ -669,7 +684,7 @@
     <nav id="metanav">
       <button class="navtab" id="nav-levels" data-tab="levels"><span class="navicon-wrap"><img class="navicon" src="assets/ui/ic_calendar.png" alt="" /></span>Levels</button>
       <button class="navtab" id="nav-shop" data-tab="shop"><span class="navicon-wrap"><img class="navicon" src="assets/ui/ic_shop.png" alt="" /></span>Shop</button>
-      <button class="navtab center" id="nav-play" data-tab="play"><span class="navicon-wrap"><img class="navicon" src="assets/ui/ic_home.png" alt="" /></span>Play</button>
+      <button class="navtab center" id="nav-home" data-tab="home"><span class="navicon-wrap"><img class="navicon" src="assets/ui/ic_home.png" alt="" /></span>Home</button>
       <button class="navtab" id="nav-daily" data-tab="daily"><span class="navicon-wrap"><img class="navicon" src="assets/ui/ic_mail.png" alt="" /></span>Daily</button>
       <button class="navtab" id="nav-settings" data-tab="settings"><span class="navicon-wrap"><img class="navicon" src="assets/ui/ic_gear.png" alt="" /></span>Settings</button>
     </nav>

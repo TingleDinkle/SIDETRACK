@@ -13,7 +13,6 @@ const fresh = () => ({
     boosters: { reverse: 2, track: 3, hold: 2, boost: 2 },
     dailyDay: 0,
     lastDaily: null,
-    lastScratch: null,
 });
 /** Coin / gem price to buy one use of each booster. */
 export const BOOSTER_PRICE = {
@@ -146,14 +145,9 @@ export class Economy {
         return { reward, day };
     }
     /* --------------------------- scratch & win --------------------------- */
-    canScratch() {
-        return this.data.lastScratch !== this.today();
-    }
-    /** Reveal one daily scratch reward (random). Null if already scratched today. */
+    /** Reveal one scratch reward (random). Repeatable — the UI gives a fresh board
+     *  on every visit and on page refresh (no daily lock). */
     scratch() {
-        if (!this.canScratch())
-            return null;
-        this.data.lastScratch = this.today();
         const roll = Math.random();
         let reward;
         if (roll < 0.55)
