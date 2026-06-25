@@ -21,6 +21,8 @@ import { Simulation } from './sim.js';
 import { validateLevel } from './levelValidate.js';
 import { buildGrid } from './level.js';
 import { resolveTarget, Tutorial } from './tutorial.js';
+import { TUTORIALS } from './tutorialData.js';
+import { LEVEL_LIBRARY } from './levelData.js';
 import type { Level } from './level.js';
 import type { Heading } from './types.js';
 
@@ -594,6 +596,24 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
   ok('single-step tutorial is last immediately', tut2.isLast());
   tut2.end();
   ok('tutorial inactive after end()', !tut2.active());
+
+  // Authored scripts: every key is a real level, and every non-explicit target
+  // resolves to at least one cell on that level.
+  {
+    const byId = new Map(LEVEL_LIBRARY.map((l) => [l.id, l]));
+    for (const [id, script] of Object.entries(TUTORIALS)) {
+      const level = byId.get(id);
+      ok(`tutorial ${id}: level exists`, !!level);
+      ok(`tutorial ${id}: has steps`, script.steps.length > 0);
+      if (!level) continue;
+      const grid = buildGrid(level);
+      script.steps.forEach((s, i) => {
+        const cells = resolveTarget(s.target, grid, level);
+        ok(`tutorial ${id} step ${i + 1}: resolves to >=1 cell`, cells.length > 0);
+      });
+    }
+    eq('tutorial keys', Object.keys(TUTORIALS).sort(), ['1-2', '1-3', '2-1', '3-1', '4-1', '4-3']);
+  }
 }
 
 /* ----------------------------- report ----------------------------- */
