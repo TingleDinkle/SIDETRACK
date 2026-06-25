@@ -14,3 +14,5 @@ src/*.js
 src/*.js.map
 # Source 3D art pack (18MB, not used at runtime — bake to PNG sprites instead).
 src/Models/
+# Source UI kit (atlases/fonts/PDF) — runtime slices live in assets/ui + assets/fonts.
+src/2D Game UI Kit/

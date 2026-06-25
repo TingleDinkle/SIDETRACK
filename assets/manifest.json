@@ -23,6 +23,11 @@
     "icon_wagon":       { "src": "icons/mine-wagon.png" },
     "icon_rail":        { "src": "icons/rail-road.png" },
     "icon_signal_go":   { "src": "icons/traffic-lights-green.png" },
-    "icon_signal_stop": { "src": "icons/traffic-lights-red.png" }
+    "icon_signal_stop": { "src": "icons/traffic-lights-red.png" },
+
+    "ui_reverse": { "src": "ui/ic_reverse.png" },
+    "ui_track":   { "src": "ui/ic_plus.png" },
+    "ui_hold":    { "src": "ui/ic_hold.png" },
+    "ui_boost":   { "src": "ui/ic_boost.png" }
   }
 }

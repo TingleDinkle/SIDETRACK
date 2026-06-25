@@ -161,11 +161,13 @@ async function boot() {
     //   +Track  — grant one extra track piece of budget
     //   Hold    — freeze one object (signal / gate / mover) for the run
     //   Boost   — run Play at 2×
+    // Full-colour ability icons from the UI kit (swirl/plus/hand/star), drawn as
+    // sprites; `color` is the fallback dot only (used if the sprite isn't loaded).
     const boosters = [
-        { id: 'reverse', icon: 'icon_loco', color: '#3f7fd2', name: 'Reverse', count: 2 },
-        { id: 'track', icon: 'icon_rail', color: '#4fae5a', name: '+Track', count: 3 },
-        { id: 'hold', icon: 'icon_signal_stop', color: '#d2553f', name: 'Hold', count: 2 },
-        { id: 'boost', icon: 'icon_signal_go', color: '#d9a82e', name: 'Boost', count: 2 },
+        { id: 'reverse', icon: 'ui_reverse', color: '#3f7fd2', name: 'Reverse', count: 2 },
+        { id: 'track', icon: 'ui_track', color: '#4fae5a', name: '+Track', count: 3 },
+        { id: 'hold', icon: 'ui_hold', color: '#d2553f', name: 'Hold', count: 2 },
+        { id: 'boost', icon: 'ui_boost', color: '#d9a82e', name: 'Boost', count: 2 },
     ];
     const boostersEl = el('boosters');
     const idpr = Math.min(2, window.devicePixelRatio || 1);
@@ -182,8 +184,9 @@ async function boot() {
         const cx = cvs.getContext('2d');
         if (cx) {
             cx.scale(idpr, idpr);
-            if (!assets.drawIcon(cx, b.icon, 17, 17, 30, 30, b.color)) {
-                cx.fillStyle = b.color; // fallback dot if icons aren't loaded
+            // Full-colour kit sprite (draw, not drawIcon — these aren't monochrome).
+            if (!assets.draw(cx, b.icon, 17, 17, 34, 34)) {
+                cx.fillStyle = b.color; // fallback dot if sprites aren't loaded
                 cx.beginPath();
                 cx.arc(17, 17, 12, 0, Math.PI * 2);
                 cx.fill();
