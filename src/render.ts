@@ -455,9 +455,11 @@ export class Renderer {
       this.sharp.width = W;
       this.sharp.height = H;
       this.sharpCtx = this.sharp.getContext('2d');
+      if (!this.sharpCtx) this.sharp = null; // failed alloc — retry next frame
     }
     const sc = this.sharpCtx;
-    if (!sc) return;
+    if (!sc || !this.sharp) return;
+    const snap = this.sharp;
 
     // 1) Snapshot the finished frame (identity transform, device px).
     sc.setTransform(1, 0, 0, 1, 0, 0);
@@ -468,7 +470,7 @@ export class Renderer {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.filter = `blur(${Math.max(2, Math.round(6 * this.dpr))}px)`;
-    ctx.drawImage(this.sharp, 0, 0);
+    ctx.drawImage(snap, 0, 0);
     ctx.filter = 'none';
     ctx.fillStyle = 'rgba(10,12,20,0.45)';
     ctx.fillRect(0, 0, W, H);
@@ -483,7 +485,7 @@ export class Renderer {
       this.roundRect(left - pad, top - pad, size + pad * 2, size + pad * 2, size * 0.18);
       ctx.clip();
       // Source = full device snapshot; dest = full CSS board → lands 1:1 in device px.
-      ctx.drawImage(this.sharp, 0, 0, W, H, 0, 0, cssW, cssH);
+      ctx.drawImage(snap, 0, 0, W, H, 0, 0, cssW, cssH);
       ctx.restore();
     }
 
