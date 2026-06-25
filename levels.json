@@ -775,7 +775,7 @@
       "world": 5,
       "name": "Confluence",
       "grid": {
-        "cols": 8,
+        "cols": 7,
         "rows": 5
       },
       "trackBudget": 6,
@@ -786,7 +786,7 @@
       },
       "fixedTiles": [
         {
-          "x": 7,
+          "x": 6,
           "y": 3,
           "type": "exit",
           "heading": "W"
@@ -833,36 +833,25 @@
           "y": 4,
           "type": "track",
           "edges": [
-            "N",
-            "S"
+            "N"
           ]
         },
         {
-          "x": 2,
-          "y": 3,
-          "type": "signal",
-          "edges": [
-            "W",
-            "E"
-          ],
-          "open": true
-        },
-        {
-          "x": 5,
+          "x": 1,
           "y": 1,
           "type": "button",
           "edges": [
-            "W",
-            "S"
+            "S",
+            "E"
           ],
           "color": "red"
         },
         {
-          "x": 5,
+          "x": 4,
           "y": 3,
           "type": "gate",
           "edges": [
-            "N",
+            "W",
             "E"
           ],
           "color": "red",
@@ -876,7 +865,7 @@
           "number": 1
         },
         {
-          "x": 6,
+          "x": 5,
           "y": 3,
           "number": 2
         }

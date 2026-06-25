@@ -109,12 +109,12 @@ const SOLUTIONS: Record<string, Seg[]> = {
     { x: 2, y: 1, edges: ['S', 'N'] },
   ],
   '5-3': [
-    { x: 1, y: 3, edges: ['W', 'E'] },
-    { x: 4, y: 3, edges: ['W', 'N'] },
-    { x: 4, y: 2, edges: ['N', 'S'] },
-    { x: 4, y: 1, edges: ['S', 'E'] },
-    { x: 5, y: 2, edges: ['N', 'S'] },
-    { x: 6, y: 3, edges: ['W', 'E'] },
+    { x: 1, y: 3, edges: ['W', 'N'] },
+    { x: 1, y: 2, edges: ['N', 'S'] },
+    { x: 2, y: 1, edges: ['W', 'S'] },
+    { x: 2, y: 2, edges: ['N', 'S'] },
+    { x: 2, y: 3, edges: ['N', 'E'] },
+    { x: 5, y: 3, edges: ['W', 'E'] },
   ],
 };
 

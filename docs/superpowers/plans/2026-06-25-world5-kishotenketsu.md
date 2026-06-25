@@ -19,6 +19,7 @@
   - **5-1 Right of Way** — grid 6×3, budget 4. loco `(0,1)E`, exit `(5,1)W`, gate `red (4,1)[W,E]` closed, button `red (1,0)[S,E]`, wagons #1 `(2,0)` #2 `(3,1)`. Solution: `(1,1)[W,N] (2,0)[W,S] (2,1)[N,E] (3,1)[W,E]`.
   - **5-2 The Long Way Round** — grid 6×3, budget 3. loco `(0,1)E`, exit `(2,0)S`, tunnel pair 1 `(1,1)[W]`/`(3,1)[E]`, gate `red (3,2)[W,E]` closed, button `red (4,2)[N,W]`, wagons #1 `(4,1)` #2 `(2,1)`. Solution: `(4,1)[W,S] (2,2)[E,N] (2,1)[S,N]`.
   - **5-3 Confluence** — grid 8×5, budget 6. loco `(0,3)E`, exit `(7,3)W`, shaft col3 `(3,0)[S] (3,1)[N,S] (3,2)[N,S] (3,3)[N,E,S,W] (3,4)[N,S]`, signal `(2,3)[W,E] open:true`, button `red (5,1)[W,S]`, gate `red (5,3)[N,E]` closed, mover `(3,0)S`, wagons #1 `(1,3)` #2 `(6,3)`. Solution: `(1,3)[W,E] (4,3)[W,N] (4,2)[N,S] (4,1)[S,E] (5,2)[N,S] (6,3)[W,E]`.
+    > **Post-review revision (see spec for final):** the original 5-3 above had a *decorative* trolley (the forced signal auto-timed the crossing, so the player could never collide). 5-3 was reworked so the trolley is a real, fail-able hazard: signal removed; grid 7×5; button `red (1,1)[S,E]`, gate `red (4,3)[W,E]`, exit `(6,3)W`, shaft floor `(3,4)[N]`, wagon #2 `(5,3)`. The gate-arming detour now *also* provides the timing. The shipped level data + verified solution + collision anti-test are the source of truth.
 - **World 5 entry:** `{ id: 5, name: 'Kishotenketsu', blurb: 'Order is not what you see. Tunnels, gates and trolleys — composed.' }`.
 
 ---

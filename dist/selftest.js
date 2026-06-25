@@ -584,10 +584,11 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
     ok('5-2 emerge-straight loses', outcomeOf('5-2', [
         { x: 4, y: 1, edges: ['W', 'E'] },
     ]) === 'lost');
-    ok('5-3 rush-to-gate loses', outcomeOf('5-3', [
+    // Rushing straight across row 3 reaches the crossing the same tick as the trolley.
+    ok('5-3 naive rush collides (loses)', outcomeOf('5-3', [
         { x: 1, y: 3, edges: ['W', 'E'] },
-        { x: 4, y: 3, edges: ['W', 'E'] },
-        { x: 6, y: 3, edges: ['W', 'E'] },
+        { x: 2, y: 3, edges: ['W', 'E'] },
+        { x: 5, y: 3, edges: ['W', 'E'] },
     ]) === 'lost');
 }
 /* ----------------------------- report ----------------------------- */

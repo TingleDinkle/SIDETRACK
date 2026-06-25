@@ -1,6 +1,7 @@
 /**
- * The level library — 13 original levels across 4 worlds, each world
- * introducing one mechanic. Authored as type-checked TypeScript (the source of
+ * The level library — 16 original levels across 5 worlds. Worlds 1–4 each
+ * introduce one mechanic; World 5 (Kishotenketsu) composes several per level.
+ * Authored as type-checked TypeScript (the source of
  * truth); `levels.json` is generated from this at build time and loaded at
  * runtime via the JSON loader (see levelLoader.ts), with this array as the
  * offline fallback.
@@ -274,23 +275,26 @@ export const LEVEL_LIBRARY: Level[] = [
     id: '5-3',
     world: 5,
     name: 'Confluence',
-    grid: { cols: 8, rows: 5 },
+    grid: { cols: 7, rows: 5 },
     trackBudget: 6,
     locomotive: { x: 0, y: 3, heading: 'E' },
     fixedTiles: [
-      { x: 7, y: 3, type: 'exit', heading: 'W' },
+      { x: 6, y: 3, type: 'exit', heading: 'W' },
+      // The trolley falls down column 3; the crossing is at (3,3). A straight rush
+      // along row 3 reaches it the same tick the trolley does — collision.
       { x: 3, y: 0, type: 'track', edges: ['S'] },
       { x: 3, y: 1, type: 'track', edges: ['N', 'S'] },
       { x: 3, y: 2, type: 'track', edges: ['N', 'S'] },
       { x: 3, y: 3, type: 'track', edges: ['N', 'E', 'S', 'W'] },
-      { x: 3, y: 4, type: 'track', edges: ['N', 'S'] },
-      { x: 2, y: 3, type: 'signal', edges: ['W', 'E'], open: true },
-      { x: 5, y: 1, type: 'button', edges: ['W', 'S'], color: 'red' },
-      { x: 5, y: 3, type: 'gate', edges: ['N', 'E'], color: 'red', open: false },
+      { x: 3, y: 4, type: 'track', edges: ['N'] },
+      // The button is up a side shaft: arming the gate also costs the ticks that let
+      // the trolley clear the crossing first — one detour solves gate AND timing.
+      { x: 1, y: 1, type: 'button', edges: ['S', 'E'], color: 'red' },
+      { x: 4, y: 3, type: 'gate', edges: ['W', 'E'], color: 'red', open: false },
     ],
     wagons: [
       { x: 1, y: 3, number: 1 },
-      { x: 6, y: 3, number: 2 },
+      { x: 5, y: 3, number: 2 },
     ],
     movers: [{ x: 3, y: 0, heading: 'S' }],
     objectives: { couple: 'all-in-order', passengers: 0 },

@@ -36,12 +36,12 @@ The three levels form one arc **and** each level is internally 起承転結.
   solution length — **zero slack** to flail. Difficulty escalates: one insight
   (5-1) → two (5-2) → three concurrent constraints (5-3).
 - **No engine changes.** Pure data + tests. Mechanics used are all already
-  implemented (rocks, tunnels, gates+buttons, signals, movers, coupling order).
+  implemented (rocks, tunnels, gates+buttons, movers/trolleys, coupling order).
 - **No new art.** World 5 falls back to procedural ground (the renderer uses
   `ground_w{world}` if present, else generic) — nothing to add.
 - **No tutorials** for World 5 (the `TUTORIALS` map gets no `5-*` entries).
 - Switches/junctions are intentionally **omitted** (their auto-flip topologies read
-  as illegible); the world features tunnels, gates+buttons, signals, and trolleys.
+  as illegible); the world features tunnels, gates+buttons, and trolleys.
 
 ## The three levels (final, engine-verified)
 
@@ -82,31 +82,35 @@ Solution (3): `(4,1)[W,S]`, `(2,2)[E,N]`, `(2,1)[S,N]` → **WON in 7 ticks**.
 Anti — emerge and run straight `(4,1)[W,E]` → **LOST: derailed** (off the board;
 you must take the long way).
 
-### 5-3 · Confluence — `trolley + signal + gate + button + 2 wagons`
+### 5-3 · Confluence — `trolley + gate + button + 2 wagons`
 
-Grid **8×5**, budget **6**. Loco `(0,3)→E`. Exit `(7,3)←W`.
+Grid **7×5**, budget **6**. Loco `(0,3)→E`. Exit `(6,3)←W`.
 Fixed: trolley shaft, column 3 — `(3,0)[S]`, `(3,1)[N,S]`, `(3,2)[N,S]`,
-**crossing `(3,3)[N,E,S,W]`**, `(3,4)[N,S]`; signal `(2,3)` edges `[W,E]`
-**`open: true`** (times the crossing); button `red (5,1)` edges `[W,S]`; gate
-`red (5,3)` edges `[N,E]` closed. Mover (trolley): **`(3,0)→S`**.
-Wagons: **#1 `(1,3)`**, **#2 `(6,3)`**.
+**crossing `(3,3)[N,E,S,W]`**, `(3,4)[N]`; button `red (1,1)` edges `[S,E]`;
+gate `red (4,3)` edges `[W,E]` closed. Mover (trolley): **`(3,0)→S`**.
+Wagons: **#1 `(1,3)`**, **#2 `(5,3)`**.
 
-Intent (synthesis): couple #1, then the signal forces a one-tick wait so the loco
-**crosses `(3,3)` the tick after the trolley clears it** (a straight rush arrives
-on the same tick → collision); past the crossing, detour **up** to the button
-(arms the gate), drop back **down** through the opened gate, couple #2, exit.
+Intent (true synthesis): the trolley is a **real, fail-able** hazard — a straight
+rush along row 3 reaches the crossing `(3,3)` the very tick the trolley does →
+**collision**. The button that frees the gate is up a side shaft, so arming the
+gate forces a detour — and that detour *also* spends the ticks that let the trolley
+clear the crossing first. **One detour solves the gate AND the timing.** Couple #1,
+climb to the button (gate opens), drop back to row 3 west of the crossing — which
+the trolley has long since passed — cross, through the opened gate, couple #2, exit.
+(There is no signal: the timing comes from the routing the gate already demands —
+no mechanic is present that does not constrain.)
 
-Verified trace (the intent, start to end): `t1` couple #1; `t2` **loco waits** at
-`(1,3)` (signal red) while the trolley falls to `(3,2)`; `t3` trolley occupies the
-crossing `(3,3)`, loco safely at `(2,3)`; `t4` **loco crosses `(3,3)`** as the
-trolley clears to `(3,4)`; `t8` button arms the gate; `t10` through the gate; `t11`
-couple #2; `t12` exit.
+Verified trace (start to end): `t1` couple #1, turn up; `t3` **button arms the
+gate** while the trolley falls through the crossing `(3,3)`; `t4` trolley reaches
+`(3,4)` (then derails off the bottom, parking there); `t7` **loco crosses `(3,3)`**
+— long clear; `t8` through the opened gate; `t9` couple #2; `t10` exit.
 
-Solution (6): `(1,3)[W,E]`, `(4,3)[W,N]`, `(4,2)[N,S]`, `(4,1)[S,E]`,
-`(5,2)[N,S]`, `(6,3)[W,E]` → **WON in 12 ticks**.
-Anti — rush straight to the gate `(1,3)[W,E],(4,3)[W,E],(6,3)[W,E]` → **LOST: out
-of time** (stuck at the un-armed gate). (The collision failure mode for an
-un-delayed crossing is proven separately in the prototype and by the t3/t4 trace.)
+Solution (6): `(1,3)[W,N]`, `(1,2)[N,S]`, `(2,1)[W,S]`, `(2,2)[N,S]`,
+`(2,3)[N,E]`, `(5,3)[W,E]` → **WON in 10 ticks**.
+Anti — naive rush across row 3 `(1,3)[W,E],(2,3)[W,E],(5,3)[W,E]` → **LOST:
+collision** (the trolley owns the crossing on that tick). This collision is now an
+assertion in `npm test` (not just the prototype) — the timing is provably
+load-bearing.
 
 ## Architecture & integration
 
@@ -135,7 +139,7 @@ Every assertion below runs in `npm test` (Node, no DOM):
 2. **Validation:** each new level passes `validateLevel` with zero errors (added as
    a library-wide loop in `selftest.ts`).
 3. **Anti-solutions (intent lock):** the tempting naive layout for each level is
-   asserted to end `lost` — 5-1 out-of-order, 5-2 derail, 5-3 stuck-gate — so the
+   asserted to end `lost` — 5-1 out-of-order, 5-2 derail, 5-3 collision — so the
    design is pinned from both sides (the intended path wins, the obvious one fails).
 4. **Existing suite stays green:** 119 self-tests + (13→16) level tests, plus the
    new assertions.
