@@ -15,6 +15,8 @@ import { Grid } from './grid.js';
 import { Cell, EdgeBit, Heading, OPPOSITE, addEdge, edgeList, hasEdge } from './types.js';
 import { classify } from './track.js';
 import { AssetManager } from './assets.js';
+import { Shake } from './feel/shake.js';
+import { drawHeadlight } from './feel/lighting.js';
 
 // Calibration offsets for the baked track/coupler sprites (radians). Tuned so
 // the corner piece connects the right edges and couplers lie along the train.
@@ -54,6 +56,7 @@ interface Particle {
   life: number;
   color: string;
   r0: number;
+  grav?: number; // downward accel (cells/s² · ms); defaults to a light spark fall
 }
 
 /** Named link colours for gates/buttons/switches/junctions. */
@@ -114,6 +117,7 @@ export class Renderer {
   private dpr = 1;
   private particles: Particle[] = [];
   private lastDrawMs = 0;
+  private readonly shakeFx = new Shake();
   private assets: AssetManager | null = null;
   private theme = 1; // world number, selects ground_w{theme}
 
@@ -188,14 +192,29 @@ export class Renderer {
 
   /* ----------------------------- frame ----------------------------- */
 
-  draw(grid: Grid, entities: DrawEntity[], dyn: DynamicState | null = null, tMs = 0): void {
+  /** Add a screen-shake impulse (~0.3 gentle, ~0.9 crash). */
+  kick(intensity: number): void {
+    this.shakeFx.kick(intensity);
+  }
+
+  draw(
+    grid: Grid,
+    entities: DrawEntity[],
+    dyn: DynamicState | null = null,
+    tMs = 0,
+    preview?: { x: number; y: number }[],
+  ): void {
     const ctx = this.ctx;
     const { cssW, cssH } = this.layout;
     ctx.clearRect(0, 0, cssW, cssH);
 
-    // Backdrop
+    // Backdrop — stays put so the shaking board reads against a steady frame.
     ctx.fillStyle = PAL.bg;
     ctx.fillRect(0, 0, cssW, cssH);
+
+    const sh = this.shakeFx.offset(tMs, this.layout.cell);
+    ctx.save();
+    ctx.translate(sh.x, sh.y);
 
     this.drawBoard(grid);
 
@@ -211,13 +230,54 @@ export class Renderer {
     // 3-D objects (rock/tunnel/gate/signal) go OVER the rails.
     for (const c of grid.cells) this.drawTileMarker(c, grid, dyn, 'object');
 
+    // Planned-route telegraph (editing only): where the train will roll.
+    if (preview && preview.length > 1) this.drawPreview(preview, tMs);
+
+    // Warm headlight pool under the loco for the dark-mine mood.
+    const loco = entities.find((e) => e.kind === 'loco');
+    if (loco) {
+      const { ox, oy, cell } = this.layout;
+      drawHeadlight(ctx, ox + (loco.x + 0.5) * cell, oy + (loco.y + 0.5) * cell, cell, loco.heading);
+    }
+
     // Entities — drawn back-to-front so the loco sits on top of its wagons.
     for (const e of entities) if (e.kind === 'coupler') this.drawEntity(e);
     for (const e of entities) if (e.kind === 'wagon' || e.kind === 'mover') this.drawEntity(e);
     for (const e of entities) if (e.kind === 'loco') this.drawEntity(e);
 
     this.drawParticles(tMs);
+    ctx.restore();
+
     this.drawVignette();
+  }
+
+  /** Dashed, marching route telegraph through cell centres toward the goal. */
+  private drawPreview(cells: { x: number; y: number }[], tMs: number): void {
+    const { ox, oy, cell } = this.layout;
+    const ctx = this.ctx;
+    const px = (c: { x: number; y: number }): [number, number] => [ox + (c.x + 0.5) * cell, oy + (c.y + 0.5) * cell];
+    ctx.save();
+    ctx.strokeStyle = 'rgba(126,208,154,0.5)';
+    ctx.lineWidth = Math.max(2, cell * 0.06);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([cell * 0.06, cell * 0.2]);
+    ctx.lineDashOffset = -((tMs * 0.03) % 100000); // marching ants in the travel direction
+    ctx.beginPath();
+    cells.forEach((c, i) => {
+      const [x, y] = px(c);
+      if (i) ctx.lineTo(x, y);
+      else ctx.moveTo(x, y);
+    });
+    ctx.stroke();
+    // a soft dot where the route ends (exit reached, or where it would derail)
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(126,208,154,0.65)';
+    const [ex, ey] = px(cells[cells.length - 1]);
+    ctx.beginPath();
+    ctx.arc(ex, ey, cell * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   /** Soft darkening toward the edges for depth (works with or without art). */
@@ -297,18 +357,54 @@ export class Renderer {
     }
   }
 
-  /** Spawn a rising smoke puff from a loco's chimney. */
-  spawnSmoke(cellX: number, cellY: number, tMs: number): void {
+  /** Spawn a rising smoke puff from a loco's chimney, drifting behind its travel. */
+  spawnSmoke(cellX: number, cellY: number, tMs: number, heading?: Heading): void {
+    const back: Record<Heading, [number, number]> = { N: [0, 1], S: [0, -1], E: [-1, 0], W: [1, 0] };
+    const [bx, by] = heading ? back[heading] : [0, 0];
     this.particles.push({
-      cx: cellX + 0.5 + (Math.random() - 0.5) * 0.1,
-      cy: cellY + 0.4,
-      vx: (Math.random() - 0.5) * 0.15,
+      cx: cellX + 0.5 + bx * 0.22 + (Math.random() - 0.5) * 0.1,
+      cy: cellY + 0.42 + by * 0.18,
+      vx: (Math.random() - 0.5) * 0.15 + bx * 0.06,
       vy: -0.35 - Math.random() * 0.2,
       born: tMs,
       life: 650 + Math.random() * 350,
-      color: 'rgba(170,160,150,0.55)',
+      color: 'rgba(170,160,150,0.5)',
       r0: 0.1 + Math.random() * 0.06,
+      grav: 0.0005, // smoke barely falls; it keeps rising
     });
+  }
+
+  /** Spawn a crash: sparks/debris flung out plus a grey poof. */
+  spawnDebris(cellX: number, cellY: number, tMs: number): void {
+    for (let i = 0; i < 16; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 1.0 + Math.random() * 2.2;
+      this.particles.push({
+        cx: cellX + 0.5,
+        cy: cellY + 0.5,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 0.6, // bias upward, then gravity pulls debris down
+        born: tMs,
+        life: 420 + Math.random() * 320,
+        color: Math.random() < 0.5 ? '#caa45f' : 'rgba(120,110,100,0.85)',
+        r0: 0.05 + Math.random() * 0.06,
+        grav: 0.004,
+      });
+    }
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.particles.push({
+        cx: cellX + 0.5,
+        cy: cellY + 0.5,
+        vx: Math.cos(a) * 0.4,
+        vy: -0.3 - Math.random() * 0.3,
+        born: tMs,
+        life: 600 + Math.random() * 300,
+        color: 'rgba(90,80,75,0.55)',
+        r0: 0.12 + Math.random() * 0.08,
+        grav: 0.0006,
+      });
+    }
   }
 
   private drawParticles(tMs: number): void {
@@ -327,7 +423,7 @@ export class Renderer {
       if (age >= p.life) continue;
       p.cx += (p.vx * dt) / 1000;
       p.cy += (p.vy * dt) / 1000;
-      p.vy += (0.0012 * dt) / 1; // slight gravity for sparks; smoke rises faster than it falls
+      p.vy += (p.grav ?? 0.0012) * dt; // per-particle gravity (debris falls hard, smoke barely)
       const k = 1 - age / p.life;
       ctx.globalAlpha = Math.max(0, k);
       ctx.fillStyle = p.color;

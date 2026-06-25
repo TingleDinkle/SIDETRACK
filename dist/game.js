@@ -14,6 +14,8 @@ import { Editor } from './editor.js';
 import { InputController } from './input.js';
 import { buildGrid } from './level.js';
 import { Simulation } from './sim.js';
+import { easeFrac } from './feel/motion.js';
+import { tracePath } from './feel/pathpreview.js';
 const TICK_BASE_MS = 360; // 1× tick interval
 const lerp = (a, b, t) => a + (b - a) * t;
 export class Game {
@@ -35,25 +37,40 @@ export class Game {
         this.acc = 0; // accumulated ms toward the next tick
         this.lastTime = 0;
         this.now = 0; // latest RAF timestamp (for particle spawns)
+        this.finishing = false; // playing out the final move (win) before the panel
+        this.settling = false; // final move eases to a stop instead of cruising
         this.loop = (now) => {
             const dt = this.lastTime ? now - this.lastTime : 0;
             this.lastTime = now;
             this.now = now;
-            if (this.state === 'running' && this.sim && this.sim.status === 'running') {
-                this.acc += dt;
-                const interval = this.tickInterval();
-                let guard = 0;
-                while (this.acc >= interval && this.sim.status === 'running' && guard++ < 8) {
-                    this.sim.tick();
-                    this.afterTick();
-                    this.acc -= interval;
+            const s = this.sim;
+            if (this.state === 'running' && s) {
+                if (s.status === 'running') {
+                    this.acc += dt;
+                    const interval = this.tickInterval();
+                    let guard = 0;
+                    while (this.acc >= interval && s.status === 'running' && guard++ < 8) {
+                        s.tick();
+                        this.afterTick();
+                        this.acc -= interval;
+                    }
+                    if (s.status !== 'running')
+                        this.beginFinish();
                 }
-                if (this.sim.status !== 'running')
-                    this.onSimEnded();
+                else if (this.finishing) {
+                    // Let the final move ease to a stop, then reveal the outcome.
+                    this.acc += dt;
+                    if (this.acc >= this.tickInterval()) {
+                        this.finishing = false;
+                        this.settling = false;
+                        this.onSimEnded();
+                    }
+                }
             }
-            const animating = this.state === 'running' && this.sim && this.sim.status === 'running';
+            const cruising = this.state === 'running' && s != null && s.status === 'running';
+            const animating = cruising || this.finishing;
             const frac = animating ? Math.min(1, this.acc / this.tickInterval()) : 1;
-            this.renderer.draw(this.grid, this.buildEntities(frac), this.dynState(), now);
+            this.renderer.draw(this.grid, this.buildEntities(frac), this.dynState(), now, this.previewPath());
             if (this.held.size)
                 this.renderer.markFrozen(this.frozenCells());
             if (this.holdTargeting)
@@ -107,6 +124,8 @@ export class Game {
         this.sim = null;
         this.state = 'editing';
         this.acc = 0;
+        this.finishing = false;
+        this.settling = false;
         this.held.clear();
         this.cancelHoldTargeting();
         this.renderer.setTheme(typeof level.world === 'number' ? level.world : 1);
@@ -156,8 +175,13 @@ export class Game {
                 this.audio.play('button');
             }
         }
-        if (s.status === 'running')
-            this.renderer.spawnSmoke(s.loco.x, s.loco.y, this.now);
+        // Rolling feedback — only when the loco actually advanced (it idles silently
+        // while held at a signal/gate): a rail clack + a chimney puff drifting behind.
+        const moved = s.loco.x !== s.loco.px || s.loco.y !== s.loco.py;
+        if (s.status === 'running' && moved) {
+            this.audio.play('clack');
+            this.renderer.spawnSmoke(s.loco.x, s.loco.y, this.now, s.loco.heading);
+        }
     }
     dynState() {
         const s = this.sim;
@@ -170,8 +194,10 @@ export class Game {
         };
     }
     buildEntities(rawFrac) {
-        // Ease the motion (easeInOutQuad) for a gentler glide between ticks.
-        const frac = rawFrac < 0.5 ? 2 * rawFrac * rawFrac : 1 - Math.pow(-2 * rawFrac + 2, 2) / 2;
+        // Constant-speed cruise, easing only out of rest (launch) and into the stop
+        // (settle) — so a multi-cell run rolls smoothly instead of pulsing per cell.
+        const phase = this.settling ? 'settle' : this.sim && this.sim.ticks <= 1 ? 'launch' : 'cruise';
+        const frac = easeFrac(rawFrac, phase);
         // Lerp between ticks, but snap across teleports (a jump of >1 cell).
         const pos = (px, py, x, y) => Math.abs(x - px) + Math.abs(y - py) > 1.5 ? { x, y } : { x: lerp(px, x, frac), y: lerp(py, y, frac) };
         const out = [];
@@ -227,7 +253,38 @@ export class Game {
         this.sim = new Simulation(this.grid, this.level, this.held);
         this.input.setEnabled(false);
         this.acc = 0;
+        this.finishing = false;
+        this.settling = false;
         this.hideOutcome();
+    }
+    /** Sim just stopped during continuous play. Win → glide the last move to a
+     *  stop (eased settle) before celebrating; derail → crash now, resolve now. */
+    beginFinish() {
+        if (this.sim?.status === 'won') {
+            this.finishing = true;
+            this.settling = true;
+            this.acc = 0; // restart the inter-tick clock for the final glide
+            this.audio.play('arrive');
+        }
+        else {
+            this.finalize();
+        }
+    }
+    /** Resolve a finished sim immediately (used when stepping, and on derail). */
+    finalize() {
+        if (this.sim?.status === 'lost')
+            this.onCrash();
+        this.onSimEnded();
+    }
+    /** Visceral derail feedback: impact sound, debris burst, a hard screen kick. */
+    onCrash() {
+        const s = this.sim;
+        if (!s)
+            return;
+        this.audio.play('crash');
+        this.renderer.spawnDebris(s.loco.x, s.loco.y, this.now);
+        this.renderer.kick(0.9);
+        navigator.vibrate?.(120);
     }
     onSimEnded() {
         if (!this.sim)
@@ -236,17 +293,21 @@ export class Game {
         this.state = won ? 'won' : 'lost';
         if (won) {
             this.audio.play('win');
+            this.audio.play('whistle');
             this.renderer.spawnBurst(this.sim.loco.x, this.sim.loco.y, '#7ed09a', 22, this.now);
+            this.renderer.kick(0.3);
             navigator.vibrate?.([20, 40, 30]);
             if (this.onWin)
                 this.onWin(this.level.id, this.sim.ticks);
         }
-        else {
-            this.audio.play('lose');
-            navigator.vibrate?.(120);
-        }
         this.showOutcome();
         this.updateControls();
+    }
+    /** Where the train will roll given the current track (editing-only telegraph). */
+    previewPath() {
+        if (this.state !== 'editing')
+            return undefined;
+        return tracePath(this.grid, this.level.locomotive);
     }
     /* ----------------------------- view ----------------------------- */
     resize() {
@@ -314,6 +375,8 @@ export class Game {
         this.state = 'editing';
         this.input.setEnabled(true);
         this.acc = 0;
+        this.finishing = false;
+        this.settling = false;
         this.hideOutcome();
         this.updateControls();
     }
@@ -322,6 +385,7 @@ export class Game {
             case 'editing':
                 this.startSim();
                 this.audio.play('start');
+                this.audio.play('whistle');
                 this.state = 'running';
                 break;
             case 'running':
@@ -348,7 +412,7 @@ export class Game {
             this.afterTick();
             this.acc = 0;
             if (this.sim.status !== 'running')
-                this.onSimEnded();
+                this.finalize();
             else
                 this.state = 'paused';
         }
@@ -369,6 +433,8 @@ export class Game {
         this.state = 'editing';
         this.input.setEnabled(true);
         this.acc = 0;
+        this.finishing = false;
+        this.settling = false;
         this.held.clear();
         this.cancelHoldTargeting();
         this.editor.clearAll();

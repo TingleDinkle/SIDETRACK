@@ -48,6 +48,30 @@ export class AudioManager {
         osc.start(start);
         osc.stop(start + dur + 0.02);
     }
+    /** A short filtered white-noise burst — for impacts (the crash). */
+    noise(start, dur, peak, lowpassHz) {
+        const ctx = this.ctx;
+        if (!ctx || !this.master)
+            return;
+        const n = Math.max(1, Math.floor(ctx.sampleRate * dur));
+        const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < n; i++)
+            data[i] = Math.random() * 2 - 1;
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = lowpassHz;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(peak, start);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+        src.connect(lp);
+        lp.connect(g);
+        g.connect(this.master);
+        src.start(start);
+        src.stop(start + dur + 0.02);
+    }
     play(sfx) {
         if (!this.enabled)
             return;
@@ -84,6 +108,23 @@ export class AudioManager {
             case 'lose':
                 this.note(330, t, 0.18, 'sawtooth', 0.2);
                 this.note(220, t + 0.12, 0.28, 'sawtooth', 0.2);
+                break;
+            case 'clack':
+                // a soft low "tk" — quiet so it pleasantly keeps time, not annoying
+                this.note(150, t, 0.03, 'square', 0.05);
+                this.note(110, t + 0.018, 0.03, 'square', 0.045);
+                break;
+            case 'whistle': {
+                // two-tone steam toot
+                this.note(740, t, 0.22, 'triangle', 0.13);
+                this.note(560, t, 0.22, 'sine', 0.09);
+                this.note(900, t + 0.16, 0.16, 'triangle', 0.1);
+                break;
+            }
+            case 'crash':
+                this.noise(t, 0.34, 0.4, 1700); // gravelly impact
+                this.note(80, t, 0.26, 'sawtooth', 0.32); // low thud underneath
+                this.note(120, t + 0.04, 0.18, 'sawtooth', 0.18);
                 break;
         }
     }
