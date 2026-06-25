@@ -139,9 +139,11 @@ export const LEVEL_LIBRARY: Level[] = [
     trackBudget: 3,
     locomotive: { x: 0, y: 0, heading: 'E' },
     fixedTiles: [
-      { x: 2, y: 0, type: 'tunnel', edges: ['W'], pairId: 1 },
-      { x: 2, y: 4, type: 'tunnel', edges: ['W'], pairId: 1 },
-      { x: 0, y: 4, type: 'exit', heading: 'E' },
+      // A wormhole carries the train straight through: drop in heading south at
+      // (1,2), emerge still heading south at (3,2), then on to the goal.
+      { x: 1, y: 2, type: 'tunnel', edges: ['N'], pairId: 1 },
+      { x: 3, y: 2, type: 'tunnel', edges: ['S'], pairId: 1 },
+      { x: 3, y: 4, type: 'exit', heading: 'N' },
     ],
     wagons: [],
     objectives: { couple: 'all-in-order', passengers: 0 },

@@ -1,4 +1,4 @@
-import { DELTA, OPPOSITE, edgeList, hasEdge } from '../types.js';
+import { DELTA, OPPOSITE, hasEdge } from '../types.js';
 import { exitEdge } from '../track.js';
 export function tracePath(grid, start, wagons = []) {
     const cells = [{ x: start.x, y: start.y }];
@@ -32,13 +32,12 @@ export function tracePath(grid, start, wagons = []) {
         }
         if (dest.type === 'tunnel') {
             const pair = grid.cells.find((o) => o !== dest && o.type === 'tunnel' && o.pairId === dest.pairId);
-            const mouth = pair ? edgeList(pair.mask)[0] : undefined;
             cells.push({ x: nx, y: ny });
-            if (!pair || !mouth)
+            if (!pair)
                 break; // unpaired tunnel — stop here
             x = pair.x;
             y = pair.y;
-            h = mouth;
+            // h is unchanged — the wormhole carries the same direction through.
             cells.push({ x, y });
             continue;
         }

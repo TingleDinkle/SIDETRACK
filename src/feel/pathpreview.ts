@@ -9,7 +9,7 @@
  * of which depend on live sim state. Read-only; never mutates the grid.
  */
 import { Grid } from '../grid.js';
-import { DELTA, Heading, OPPOSITE, edgeList, hasEdge } from '../types.js';
+import { DELTA, Heading, OPPOSITE, hasEdge } from '../types.js';
 import { exitEdge } from '../track.js';
 
 export interface PathStart {
@@ -66,12 +66,11 @@ export function tracePath(
       const pair = grid.cells.find(
         (o) => o !== dest && o.type === 'tunnel' && o.pairId === dest.pairId,
       );
-      const mouth = pair ? edgeList(pair.mask)[0] : undefined;
       cells.push({ x: nx, y: ny });
-      if (!pair || !mouth) break; // unpaired tunnel — stop here
+      if (!pair) break; // unpaired tunnel — stop here
       x = pair.x;
       y = pair.y;
-      h = mouth;
+      // h is unchanged — the wormhole carries the same direction through.
       cells.push({ x, y });
       continue;
     }

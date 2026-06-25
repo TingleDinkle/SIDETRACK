@@ -12,7 +12,7 @@
  */
 
 import { Grid } from './grid.js';
-import { Cell, EdgeBit, Heading, edgeList } from './types.js';
+import { Cell, EdgeBit, Heading, OPPOSITE, edgeList, hasEdge } from './types.js';
 import { classify } from './track.js';
 import { AssetManager } from './assets.js';
 import { Shake } from './feel/shake.js';
@@ -870,7 +870,7 @@ export class Renderer {
       case 'rock': this.drawRock(c.x, c.y); break;
       case 'exit': this.drawExit(c.x, c.y); break;
       case 'start': this.drawStartPad(c.x, c.y); break;
-      case 'tunnel': this.drawTunnel(c); break;
+      case 'tunnel': this.drawTunnel(c, grid); break;
       case 'button': this.drawButton(c); break;
       case 'switch': this.drawSwitch(c); break;
       case 'gate': {
@@ -1137,19 +1137,30 @@ export class Renderer {
     ctx.restore();
   }
 
+  /** The edge a tunnel's machine should face: the side a neighbouring rail
+   *  connects on (so the train visibly enters/leaves through it), falling back
+   *  to the cell's authored mouth. Purely cosmetic — tunnels carry the train
+   *  straight through regardless of orientation. */
+  private tunnelFacing(c: Cell, grid: Grid): Heading {
+    for (const h of ['W', 'E', 'N', 'S'] as Heading[]) {
+      const nb = grid.neighbor(c.x, c.y, h);
+      if (nb && nb.type !== 'tunnel' && hasEdge(nb.mask, OPPOSITE[h])) return h;
+    }
+    return edgeList(c.mask)[0] ?? 'W';
+  }
+
   /**
-   * A tunnel = the machine model. Baked with its opening facing West, so the
-   * mouth is turned to the cell's open edge: mirrored for an East mouth (keeps it
-   * upright) and quarter-turned for N/S. The train then visibly enters/leaves
-   * through the opening.
+   * A tunnel = the machine model. Baked with its opening facing West; we turn it
+   * to face the connecting rail: mirrored for an East side (keeps it upright) and
+   * quarter-turned for N/S.
    */
-  private drawTunnel(c: Cell): void {
+  private drawTunnel(c: Cell, grid: Grid): void {
     const ctx = this.ctx;
     const { left, top, size } = this.cellRect(c.x, c.y);
     const cx = left + size / 2;
     const cy = top + size / 2;
     if (this.assets && this.assets.has('tile_tunnel')) {
-      const mouth = edgeList(c.mask)[0] ?? 'W';
+      const mouth = this.tunnelFacing(c, grid);
       this.contactShadow(cx, cy, size);
       ctx.save();
       ctx.translate(cx, cy);

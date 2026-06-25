@@ -271,17 +271,17 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
         if (opts.open !== undefined)
             c.open = opts.open;
     };
-    // H) tunnel teleports the loco across the board to the exit -> win
+    // H) tunnel carries the loco straight through to the exit -> win
     {
-        const g = new Grid(3, 3);
+        const g = new Grid(4, 3);
         start(g, 0, 0, 'E');
         track(g, 1, 0, EW);
-        tunnel(g, 2, 0, 'W', 1); // enter here (mouth faces the track to its west)
-        tunnel(g, 2, 2, 'W', 1); // emerge here, heading W toward (1,2)
-        track(g, 1, 2, EW);
-        exit(g, 0, 2, 'E');
-        const s = run(g, lvl(3, 3, { x: 0, y: 0, heading: 'E' }));
-        eq('sim: tunnel reaches exit', s.status, 'won');
+        tunnel(g, 2, 0, 'W', 1); // enter here heading E
+        tunnel(g, 1, 2, 'W', 1); // emerge here STILL heading E (carry-through)
+        track(g, 2, 2, EW);
+        exit(g, 3, 2, 'W');
+        const s = run(g, lvl(4, 3, { x: 0, y: 0, heading: 'E' }));
+        eq('sim: tunnel carries through to the exit', s.status, 'won');
     }
     // I) a button opens a same-colour gate so the loco can pass -> win
     {
@@ -421,14 +421,14 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
     }
     // P) a wagon parked on a tunnel's EXIT couples there instead of being a collision
     {
-        const g = new Grid(3, 3);
+        const g = new Grid(4, 3);
         start(g, 0, 0, 'E');
         track(g, 1, 0, EW);
         tunnel(g, 2, 0, 'W', 1);
-        tunnel(g, 2, 2, 'W', 1);
-        track(g, 1, 2, EW);
-        exit(g, 0, 2, 'E');
-        const s = run(g, lvl(3, 3, { x: 0, y: 0, heading: 'E' }, [{ x: 2, y: 2, number: 1 }]));
+        tunnel(g, 1, 2, 'W', 1); // emerge cell; a wagon waits right on it
+        track(g, 2, 2, EW);
+        exit(g, 3, 2, 'W');
+        const s = run(g, lvl(4, 3, { x: 0, y: 0, heading: 'E' }, [{ x: 1, y: 2, number: 1 }]));
         eq('sim: wagon on tunnel exit couples -> win', s.status, 'won');
         eq('sim: that wagon is coupled', s.coupled.length, 1);
     }

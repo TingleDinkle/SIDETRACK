@@ -155,16 +155,6 @@ export class Editor {
         changed = true;
       }
     }
-    // A tunnel's single mouth follows the track laid against it, so its machine
-    // (and the train's emerge direction) faces where the train actually travels.
-    if (a.fixed && a.type === 'tunnel' && bEditable && a.mask !== addEdge(0, h)) {
-      a.mask = addEdge(0, h);
-      changed = true;
-    }
-    if (b.fixed && b.type === 'tunnel' && aEditable && b.mask !== addEdge(0, OPPOSITE[h])) {
-      b.mask = addEdge(0, OPPOSITE[h]);
-      changed = true;
-    }
     if (changed) this.strokeDirty = true;
     return changed;
   }
