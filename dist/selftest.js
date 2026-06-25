@@ -6,7 +6,7 @@
  * editor's lay/erase/budget/undo behaviour. Rendering and pointer handling are
  * verified by eye in the browser.
  */
-import { EdgeBit, OPPOSITE, edgeCount, hasEdge, headingBetween, } from './types.js';
+import { EdgeBit, OPPOSITE, addEdge, edgeCount, hasEdge, headingBetween, } from './types.js';
 import { classify, exitEdge } from './track.js';
 import { Grid } from './grid.js';
 import { Editor } from './editor.js';
@@ -547,6 +547,48 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
         }
         eq('tutorial keys', Object.keys(TUTORIALS).sort(), ['1-2', '1-3', '2-1', '3-1', '4-1', '4-3']);
     }
+}
+/* ----------------------------- World 5: validation + anti-solutions ----------------------------- */
+{
+    // (a) Every authored level validates with zero errors.
+    for (const lv of LEVEL_LIBRARY) {
+        const errs = validateLevel(lv).filter((i) => i.level === 'error');
+        ok(`validate library: ${lv.id} has no errors`, errs.length === 0);
+    }
+    const outcomeOf = (id, segs) => {
+        const level = LEVEL_LIBRARY.find((l) => l.id === id);
+        if (!level)
+            return 'no-level';
+        const grid = buildGrid(level);
+        for (const s of segs) {
+            const c = grid.get(s.x, s.y);
+            if (!c || c.fixed || c.type !== 'empty')
+                return 'unplaceable';
+            c.type = 'track';
+            let m = 0;
+            for (const e of s.edges)
+                m = addEdge(m, e);
+            c.mask = m;
+        }
+        const sim = new Simulation(grid, level);
+        let n = 0;
+        while (sim.status === 'running' && n++ < 500)
+            sim.tick();
+        return sim.status;
+    };
+    ok('5-1 naive straight line loses', outcomeOf('5-1', [
+        { x: 1, y: 1, edges: ['W', 'E'] },
+        { x: 2, y: 1, edges: ['W', 'E'] },
+        { x: 3, y: 1, edges: ['W', 'E'] },
+    ]) === 'lost');
+    ok('5-2 emerge-straight loses', outcomeOf('5-2', [
+        { x: 4, y: 1, edges: ['W', 'E'] },
+    ]) === 'lost');
+    ok('5-3 rush-to-gate loses', outcomeOf('5-3', [
+        { x: 1, y: 3, edges: ['W', 'E'] },
+        { x: 4, y: 3, edges: ['W', 'E'] },
+        { x: 6, y: 3, edges: ['W', 'E'] },
+    ]) === 'lost');
 }
 /* ----------------------------- report ----------------------------- */
 console.log(`\nSidetrack self-tests: ${passed} passed, ${failed} failed`);
