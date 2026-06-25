@@ -12,7 +12,7 @@
  */
 
 import { Grid } from './grid.js';
-import { Cell, EdgeBit, Heading, OPPOSITE, addEdge, edgeList, hasEdge } from './types.js';
+import { Cell, EdgeBit, Heading, edgeList } from './types.js';
 import { classify } from './track.js';
 import { AssetManager } from './assets.js';
 import { Shake } from './feel/shake.js';
@@ -667,28 +667,15 @@ export class Renderer {
     return { x: right ? left + size : left, y: bottom ? top + size : top };
   }
 
-  /** Edges of a start/exit cell whose neighbour actually connects back (so the
-   *  stub rail only appears once the player has laid track up against it). */
-  private connectedStubMask(c: Cell, grid: Grid): number {
-    let m = 0;
-    for (const h of edgeList(c.mask)) {
-      const nb = grid.neighbor(c.x, c.y, h);
-      if (nb && hasEdge(nb.mask, OPPOSITE[h])) m = addEdge(m, h);
-    }
-    return m;
-  }
-
   private drawTrack(c: Cell, grid: Grid, dyn: DynamicState | null): void {
-    // The goal shows no interior rail: the approaching track already reaches the
-    // shared boundary, so an exit stub would just cross over into the block. Let
-    // the rail stop exactly on the exit's edge instead.
-    if (c.type === 'exit') return;
+    // The start and exit show no interior rail: the player's track already
+    // reaches the shared boundary, so a stub here would just cross over into the
+    // pad. Let the rail stop exactly on the pad's edge (start matches exit).
+    if (c.type === 'start' || c.type === 'exit') return;
     const { left, top, size } = this.cellRect(c.x, c.y);
     const cx = left + size / 2;
     const cy = top + size / 2;
-    // For the start, only show a rail toward neighbours that actually connect
-    // back — so there's no pre-placed stub until the player's track reaches it.
-    const mask = c.type === 'start' ? this.connectedStubMask(c, grid) : c.mask;
+    const mask = c.mask;
     if (mask === 0) return;
     const edges = edgeList(mask);
     const shape = classify(mask);
