@@ -172,11 +172,12 @@ export class Simulation {
     const rawY = y + DELTA[dir].dy;
     if (!this.canEnter(rawX, rawY)) return { kind: 'derail' };
     // The goal must be entered through a rail that meets its edge — the train
-    // can't coast straight into the exit across a gap. (Everywhere else it coasts.)
+    // can't coast straight into the exit across a gap. The connection may arrive
+    // from ANY side of the goal (not just its heading), so we only require the
+    // approaching cell's rail to reach the shared edge.
     const dest = this.grid.get(rawX, rawY);
-    if (dest && dest.type === 'exit') {
-      const srcMask = this.grid.get(x, y)?.mask ?? 0;
-      if (!hasEdge(srcMask, dir) || !hasEdge(dest.mask, OPPOSITE[dir])) return { kind: 'derail' };
+    if (dest && dest.type === 'exit' && !hasEdge(this.grid.get(x, y)?.mask ?? 0, dir)) {
+      return { kind: 'derail' };
     }
     if (this.isBlocked(rawX, rawY)) return { kind: 'wait' };
     const tp = this.teleport(rawX, rawY);

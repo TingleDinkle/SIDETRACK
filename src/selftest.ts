@@ -256,6 +256,17 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
     eq('sim: cannot coast into the goal without a connecting rail', s.status, 'lost');
   }
 
+  // E4) the goal accepts a connecting rail from any edge, not just its heading -> win
+  {
+    const g = new Grid(3, 3);
+    start(g, 0, 0, 'E');
+    track(g, 1, 0, EdgeBit.W | EdgeBit.S); // curve east -> south
+    track(g, 1, 1, EdgeBit.N | EdgeBit.S); // straight down into the exit's top edge
+    exit(g, 1, 2, 'W'); // heading is W, yet the train arrives from the north
+    const s = run(g, lvl(3, 3, { x: 0, y: 0, heading: 'E' }));
+    eq('sim: goal entered from any connecting edge, not just its heading', s.status, 'won');
+  }
+
   // F) reach exit without coupling a required wagon -> lose
   {
     const g = new Grid(4, 2);
