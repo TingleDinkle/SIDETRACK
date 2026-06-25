@@ -15,6 +15,8 @@ import { InputController } from './input.js';
 import { buildGrid } from './level.js';
 import { linkColor } from './render.js';
 import { Simulation } from './sim.js';
+import { Tutorial } from './tutorial.js';
+import { TUTORIALS } from './tutorialData.js';
 import { DELTA } from './types.js';
 import { easeFrac, idleBreath } from './feel/motion.js';
 import { tracePath } from './feel/pathpreview.js';
@@ -27,6 +29,7 @@ export class Game {
         this.audio = audio;
         this.state = 'editing';
         this.sim = null;
+        this.tutorial = new Tutorial();
         this.toastTimer = 0;
         /** Hold booster: frozen object keys for the sim, plus targeting state. */
         this.held = new Set();
@@ -79,6 +82,8 @@ export class Game {
                 this.renderer.markFrozen(this.frozenCells());
             if (this.holdTargeting)
                 this.renderer.drawHoldOverlay(this.holdableCells());
+            if (this.tutorial.active())
+                this.renderer.drawTutorialSpotlight(this.tutorial.cells(), now);
             requestAnimationFrame(this.loop);
         };
         this.onHoldPointer = (e) => {
@@ -151,12 +156,74 @@ export class Game {
         const i = this.levels.indexOf(level);
         if (i >= 0)
             this.levelIndex = i;
+        this.tutorial.end(); // drop any tutorial carried from the previous level
         this.applyLevel(level);
         this.input.setEditor(this.editor);
         this.input.setEnabled(true);
         this.resize();
         this.hideOutcome();
         this.updateHud();
+        this.startTutorialIfAny(); // may disable input + show the caption card
+        this.updateControls();
+    }
+    /* ----------------------------- tutorial ----------------------------- */
+    tutorialActive() {
+        return this.tutorial.active();
+    }
+    hasTutorial() {
+        return !!TUTORIALS[this.level.id];
+    }
+    /** If the current level has a script, start it; otherwise ensure the card is hidden. */
+    startTutorialIfAny() {
+        const script = TUTORIALS[this.level.id];
+        if (!script) {
+            this.hud.tutorial.panel.classList.remove('show');
+            return;
+        }
+        this.tutorial.start(script, this.grid, this.level);
+        this.input.setEnabled(false);
+        this.renderTutorialHud();
+    }
+    /** Push the active step's text / dots / button label into the caption card. */
+    renderTutorialHud() {
+        const o = this.hud.tutorial;
+        if (!this.tutorial.active()) {
+            o.panel.classList.remove('show');
+            return;
+        }
+        const { index, total } = this.tutorial.stepInfo();
+        o.text.textContent = this.tutorial.text();
+        o.dots.textContent = Array.from({ length: total }, (_, i) => (i + 1 === index ? '●' : '○')).join(' ');
+        o.btnNext.textContent = this.tutorial.isLast() ? 'Got it ▶' : 'Next ▶';
+        o.btnSkip.style.display = total > 1 ? '' : 'none'; // a single-step tutorial only needs "Got it"
+        o.panel.classList.add('show');
+    }
+    /** Advance one step, or finish (and resume normal play) on the last step. */
+    tutorialNext() {
+        if (!this.tutorial.active())
+            return;
+        if (this.tutorial.next())
+            this.renderTutorialHud();
+        else
+            this.endTutorial();
+    }
+    /** Dismiss the whole tutorial. */
+    tutorialSkip() {
+        if (this.tutorial.active())
+            this.endTutorial();
+    }
+    endTutorial() {
+        this.tutorial.end();
+        this.hud.tutorial.panel.classList.remove('show');
+        if (this.state === 'editing')
+            this.input.setEnabled(true);
+        this.updateControls();
+    }
+    /** Replay the current level's tutorial from the `?` button. */
+    replayTutorial() {
+        if (this.state !== 'editing')
+            this.reset();
+        this.startTutorialIfAny();
         this.updateControls();
     }
     loadIndex(i) {
@@ -452,10 +519,14 @@ export class Game {
     updateControls() {
         const editing = this.state === 'editing';
         const running = this.state === 'running';
-        this.hud.btnUndo.disabled = !editing || !this.editor.canUndo();
-        this.hud.btnRedo.disabled = !editing || !this.editor.canRedo();
+        const tut = this.tutorial.active();
+        this.hud.btnUndo.disabled = !editing || tut || !this.editor.canUndo();
+        this.hud.btnRedo.disabled = !editing || tut || !this.editor.canRedo();
         this.hud.btnPlay.textContent = running ? '⏸ Pause' : this.state === 'paused' ? '▶ Resume' : '▶ Play';
+        this.hud.btnPlay.disabled = tut; // can't run the sim mid-tutorial
+        this.hud.btnStep.disabled = tut;
         this.hud.btnSpeed.textContent = `${this.speed}×`;
+        this.hud.btnHelp.classList.toggle('show', this.hasTutorial() && !tut);
         this.updateHud();
     }
     toast(msg) {
