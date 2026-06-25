@@ -83,6 +83,7 @@ export const linkColor = (name?: string): string => (name ? (LINK_COLORS[name] ?
 
 const PAL = {
   bg: '#ead9bb',
+  floorBase: '#31353f', // dark under-tone behind the mine floor (margins, not cream)
   boardLight: '#dcc8a2',
   boardDark: '#d3bd93',
   grid: 'rgba(80,60,30,0.10)',
@@ -243,8 +244,9 @@ export class Renderer {
     const { cssW, cssH } = this.layout;
     ctx.clearRect(0, 0, cssW, cssH);
 
-    // Backdrop — stays put so the shaking board reads against a steady frame.
-    ctx.fillStyle = PAL.bg;
+    // Backdrop — a dark mine under-tone (the floor tiles fill over it), so the
+    // margins around a small board read as more floor, never a cream gap.
+    ctx.fillStyle = PAL.floorBase;
     ctx.fillRect(0, 0, cssW, cssH);
 
     const sh = this.shakeFx.offset(tMs, this.layout.cell);
@@ -652,17 +654,24 @@ export class Renderer {
   private drawFloor(grid: Grid): void {
     const ctx = this.ctx;
     const a = this.assets!;
-    const { ox, oy, cell, cols, rows } = this.layout;
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) {
+    const { ox, oy, cell, cols, rows, cssW, cssH } = this.layout;
+    // Tile the floor across the WHOLE stage (aligned to the board grid), so the
+    // margins around a small board read as more mine floor rather than a cream
+    // gap. Over-fill 2 tiles past every edge so screen-shake never reveals one.
+    const x0 = Math.floor(-ox / cell) - 2;
+    const x1 = Math.ceil((cssW - ox) / cell) + 2;
+    const y0 = Math.floor(-oy / cell) - 2;
+    const y1 = Math.ceil((cssH - oy) / cell) + 2;
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
         const cx = ox + (x + 0.5) * cell;
         const cy = oy + (y + 0.5) * cell;
         a.draw(ctx, 'floor', cx, cy, cell + 1, cell + 1); // +1 kills hairline seams
       }
     }
     if (a.has('floor_detail')) {
-      for (let y = 0; y < rows; y++) {
-        for (let x = 0; x < cols; x++) {
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
           const hsh = this.cellHash(x, y);
           if (hsh % 100 >= 12) continue; // ~12% of cells, "less frequently"
           const cx = ox + (x + 0.5) * cell;
