@@ -65,9 +65,8 @@ const SOLUTIONS = {
         { x: 5, y: 1, edges: ['E', 'W'] },
     ],
     '2-3': [
-        { x: 1, y: 0, edges: ['W', 'S'] }, // curve down off the start
-        { x: 1, y: 1, edges: ['N', 'S'] }, // down into the top tunnel
-        { x: 3, y: 3, edges: ['N', 'S'] }, // out of the bottom tunnel, down to the goal
+        { x: 1, y: 0, edges: ['E', 'W'] }, // into the top tunnel heading east
+        { x: 1, y: 4, edges: ['E', 'W'] }, // out of the bottom tunnel heading west, to the goal
     ],
     '3-1': [
         { x: 1, y: 1, edges: ['E', 'W'] },

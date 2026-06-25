@@ -27,7 +27,7 @@
 
 import { Grid } from './grid.js';
 import { Level } from './level.js';
-import { Cell, DELTA, Heading, OPPOSITE, hasEdge } from './types.js';
+import { Cell, DELTA, Heading, OPPOSITE, edgeList, hasEdge } from './types.js';
 import { classify, exitEdge } from './track.js';
 
 export type SimStatus = 'running' | 'won' | 'lost';
@@ -145,14 +145,16 @@ export class Simulation {
     return false;
   }
 
-  /** If (x,y) is a tunnel, teleport to its pair carrying the SAME direction
-   *  through — a simple wormhole. The mouth/orientation is purely cosmetic. */
-  private teleport(x: number, y: number, heading: Heading): { x: number; y: number; heading: Heading } | null {
+  /** If (x,y) is a tunnel, the destination + emerge heading at its pair: the
+   *  train spits out in the direction the pair's opening (mouth) faces. */
+  private teleport(x: number, y: number): { x: number; y: number; heading: Heading } | null {
     const c = this.grid.get(x, y);
     if (!c || c.type !== 'tunnel') return null;
     const pair = this.grid.cells.find((o) => o !== c && o.type === 'tunnel' && o.pairId === c.pairId);
     if (!pair) return null;
-    return { x: pair.x, y: pair.y, heading };
+    const mouth = edgeList(pair.mask)[0];
+    if (!mouth) return null;
+    return { x: pair.x, y: pair.y, heading: mouth };
   }
 
   private freeWagonAt(x: number, y: number): SimWagon | null {
@@ -175,13 +177,11 @@ export class Simulation {
     // from ANY side of the goal (not just its heading), so we only require the
     // approaching cell's rail to reach the shared edge.
     const dest = this.grid.get(rawX, rawY);
-    if (dest && dest.type === 'exit') {
-      const src = this.grid.get(x, y);
-      // A tunnel emits the train straight on, so it connects to an adjacent goal.
-      if (src?.type !== 'tunnel' && !hasEdge(src?.mask ?? 0, dir)) return { kind: 'derail' };
+    if (dest && dest.type === 'exit' && !hasEdge(this.grid.get(x, y)?.mask ?? 0, dir)) {
+      return { kind: 'derail' };
     }
     if (this.isBlocked(rawX, rawY)) return { kind: 'wait' };
-    const tp = this.teleport(rawX, rawY, dir);
+    const tp = this.teleport(rawX, rawY);
     return {
       kind: 'move',
       rawX,
