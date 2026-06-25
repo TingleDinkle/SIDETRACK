@@ -529,12 +529,16 @@ export class Renderer {
   }
 
   private drawTrack(c: Cell, grid: Grid, dyn: DynamicState | null): void {
+    // The goal shows no interior rail: the approaching track already reaches the
+    // shared boundary, so an exit stub would just cross over into the block. Let
+    // the rail stop exactly on the exit's edge instead.
+    if (c.type === 'exit') return;
     const { left, top, size } = this.cellRect(c.x, c.y);
     const cx = left + size / 2;
     const cy = top + size / 2;
-    // For start/exit, only show a rail toward neighbours that actually connect
-    // back — so there's no pre-placed stub until the player's track reaches them.
-    const mask = c.type === 'start' || c.type === 'exit' ? this.connectedStubMask(c, grid) : c.mask;
+    // For the start, only show a rail toward neighbours that actually connect
+    // back — so there's no pre-placed stub until the player's track reaches it.
+    const mask = c.type === 'start' ? this.connectedStubMask(c, grid) : c.mask;
     if (mask === 0) return;
     const edges = edgeList(mask);
     const shape = classify(mask);
