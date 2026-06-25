@@ -24,7 +24,8 @@
  *                    alternating-junction pass-flip.
  *   6) Win / lose  — loco on exit with all wagons coupled = WIN; incomplete = FAIL.
  */
-import { DELTA, OPPOSITE, edgeList, hasEdge } from './types.js';
+import { tunnelExitDir } from './grid.js';
+import { DELTA, OPPOSITE, hasEdge } from './types.js';
 import { classify, exitEdge } from './track.js';
 export class Simulation {
     constructor(grid, level, held = new Set()) {
@@ -99,7 +100,8 @@ export class Simulation {
         return false;
     }
     /** If (x,y) is a tunnel, the destination + emerge heading at its pair: the
-     *  train spits out in the direction the pair's opening (mouth) faces. */
+     *  train spits out toward the rail/goal the pair connects to, so it always
+     *  lands on track rather than off the board. */
     teleport(x, y) {
         const c = this.grid.get(x, y);
         if (!c || c.type !== 'tunnel')
@@ -107,10 +109,10 @@ export class Simulation {
         const pair = this.grid.cells.find((o) => o !== c && o.type === 'tunnel' && o.pairId === c.pairId);
         if (!pair)
             return null;
-        const mouth = edgeList(pair.mask)[0];
-        if (!mouth)
+        const heading = tunnelExitDir(this.grid, pair);
+        if (!heading)
             return null;
-        return { x: pair.x, y: pair.y, heading: mouth };
+        return { x: pair.x, y: pair.y, heading };
     }
     freeWagonAt(x, y) {
         return this.free.find((w) => w.x === x && w.y === y) ?? null;
@@ -133,8 +135,11 @@ export class Simulation {
         // from ANY side of the goal (not just its heading), so we only require the
         // approaching cell's rail to reach the shared edge.
         const dest = this.grid.get(rawX, rawY);
-        if (dest && dest.type === 'exit' && !hasEdge(this.grid.get(x, y)?.mask ?? 0, dir)) {
-            return { kind: 'derail' };
+        if (dest && dest.type === 'exit') {
+            const src = this.grid.get(x, y);
+            // A tunnel sends the train straight on, so it may roll into an adjacent goal.
+            if (src?.type !== 'tunnel' && !hasEdge(src?.mask ?? 0, dir))
+                return { kind: 'derail' };
         }
         if (this.isBlocked(rawX, rawY))
             return { kind: 'wait' };

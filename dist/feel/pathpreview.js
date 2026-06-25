@@ -1,4 +1,15 @@
-import { DELTA, OPPOSITE, edgeList, hasEdge } from '../types.js';
+/**
+ * Planned-route telegraph. Traces where the train will roll given the current
+ * track, returning the cells it passes through. It mirrors the sim's movement
+ * rules — coast-forward, curve/junction redirects, the goal's edge connection,
+ * and tunnel teleports — so the preview matches what Play will do.
+ *
+ * It is a *best-effort* telegraph, not a guarantee: gates/signals are treated as
+ * passable (you may yet open them) and junctions take their default branch, both
+ * of which depend on live sim state. Read-only; never mutates the grid.
+ */
+import { tunnelExitDir } from '../grid.js';
+import { DELTA, OPPOSITE, hasEdge } from '../types.js';
 import { exitEdge } from '../track.js';
 export function tracePath(grid, start, wagons = []) {
     const cells = [{ x: start.x, y: start.y }];
@@ -32,13 +43,13 @@ export function tracePath(grid, start, wagons = []) {
         }
         if (dest.type === 'tunnel') {
             const pair = grid.cells.find((o) => o !== dest && o.type === 'tunnel' && o.pairId === dest.pairId);
-            const mouth = pair ? edgeList(pair.mask)[0] : undefined;
+            const out = pair ? tunnelExitDir(grid, pair) : null;
             cells.push({ x: nx, y: ny });
-            if (!pair || !mouth)
+            if (!pair || !out)
                 break; // unpaired tunnel — stop here
             x = pair.x;
             y = pair.y;
-            h = mouth; // emerge in the direction the pair's opening faces
+            h = out; // emerge toward the rail/goal the pair connects to
             cells.push({ x, y });
             continue;
         }

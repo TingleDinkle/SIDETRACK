@@ -10,6 +10,7 @@
  * The renderer owns the screen↔grid mapping (`layout`) so input and rendering
  * always agree on where a cell is.
  */
+import { tunnelExitDir } from './grid.js';
 import { EdgeBit, edgeList } from './types.js';
 import { classify } from './track.js';
 import { Shake } from './feel/shake.js';
@@ -781,7 +782,7 @@ export class Renderer {
                 this.drawStartPad(c.x, c.y);
                 break;
             case 'tunnel':
-                this.drawTunnel(c);
+                this.drawTunnel(c, grid);
                 break;
             case 'button':
                 this.drawButton(c);
@@ -1048,18 +1049,16 @@ export class Renderer {
     }
     /**
      * A tunnel = the machine model. Baked with its opening facing West; we turn it
-     * to its authored mouth (mirrored for East to stay upright, quarter-turned for
-     * N/S). The orientation is FIXED — it never spins as track is laid against it,
-     * since tunnels carry the train straight through regardless of which way they
-     * face.
+     * to face the rail/goal it connects to (so the opening points where the train
+     * exits), mirrored for East to stay upright and quarter-turned for N/S.
      */
-    drawTunnel(c) {
+    drawTunnel(c, grid) {
         const ctx = this.ctx;
         const { left, top, size } = this.cellRect(c.x, c.y);
         const cx = left + size / 2;
         const cy = top + size / 2;
         if (this.assets && this.assets.has('tile_tunnel')) {
-            const mouth = edgeList(c.mask)[0] ?? 'W';
+            const mouth = tunnelExitDir(grid, c) ?? 'W';
             this.contactShadow(cx, cy, size);
             ctx.save();
             ctx.translate(cx, cy);

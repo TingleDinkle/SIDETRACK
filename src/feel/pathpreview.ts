@@ -8,8 +8,8 @@
  * passable (you may yet open them) and junctions take their default branch, both
  * of which depend on live sim state. Read-only; never mutates the grid.
  */
-import { Grid } from '../grid.js';
-import { DELTA, Heading, OPPOSITE, edgeList, hasEdge } from '../types.js';
+import { Grid, tunnelExitDir } from '../grid.js';
+import { DELTA, Heading, OPPOSITE, hasEdge } from '../types.js';
 import { exitEdge } from '../track.js';
 
 export interface PathStart {
@@ -66,12 +66,12 @@ export function tracePath(
       const pair = grid.cells.find(
         (o) => o !== dest && o.type === 'tunnel' && o.pairId === dest.pairId,
       );
-      const mouth = pair ? edgeList(pair.mask)[0] : undefined;
+      const out = pair ? tunnelExitDir(grid, pair) : null;
       cells.push({ x: nx, y: ny });
-      if (!pair || !mouth) break; // unpaired tunnel — stop here
+      if (!pair || !out) break; // unpaired tunnel — stop here
       x = pair.x;
       y = pair.y;
-      h = mouth; // emerge in the direction the pair's opening faces
+      h = out; // emerge toward the rail/goal the pair connects to
       cells.push({ x, y });
       continue;
     }

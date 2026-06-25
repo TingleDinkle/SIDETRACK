@@ -11,7 +11,7 @@
  * always agree on where a cell is.
  */
 
-import { Grid } from './grid.js';
+import { Grid, tunnelExitDir } from './grid.js';
 import { Cell, EdgeBit, Heading, edgeList } from './types.js';
 import { classify } from './track.js';
 import { AssetManager } from './assets.js';
@@ -870,7 +870,7 @@ export class Renderer {
       case 'rock': this.drawRock(c.x, c.y); break;
       case 'exit': this.drawExit(c.x, c.y); break;
       case 'start': this.drawStartPad(c.x, c.y); break;
-      case 'tunnel': this.drawTunnel(c); break;
+      case 'tunnel': this.drawTunnel(c, grid); break;
       case 'button': this.drawButton(c); break;
       case 'switch': this.drawSwitch(c); break;
       case 'gate': {
@@ -1139,18 +1139,16 @@ export class Renderer {
 
   /**
    * A tunnel = the machine model. Baked with its opening facing West; we turn it
-   * to its authored mouth (mirrored for East to stay upright, quarter-turned for
-   * N/S). The orientation is FIXED — it never spins as track is laid against it,
-   * since tunnels carry the train straight through regardless of which way they
-   * face.
+   * to face the rail/goal it connects to (so the opening points where the train
+   * exits), mirrored for East to stay upright and quarter-turned for N/S.
    */
-  private drawTunnel(c: Cell): void {
+  private drawTunnel(c: Cell, grid: Grid): void {
     const ctx = this.ctx;
     const { left, top, size } = this.cellRect(c.x, c.y);
     const cx = left + size / 2;
     const cy = top + size / 2;
     if (this.assets && this.assets.has('tile_tunnel')) {
-      const mouth = edgeList(c.mask)[0] ?? 'W';
+      const mouth = tunnelExitDir(grid, c) ?? 'W';
       this.contactShadow(cx, cy, size);
       ctx.save();
       ctx.translate(cx, cy);

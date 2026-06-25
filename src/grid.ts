@@ -5,7 +5,7 @@
  * editor, the simulation and the renderer.
  */
 
-import { Cell, DELTA, Heading } from './types.js';
+import { Cell, DELTA, Heading, HEADINGS, OPPOSITE, edgeList, hasEdge } from './types.js';
 
 export class Grid {
   readonly cols: number;
@@ -40,4 +40,21 @@ export class Grid {
     const d = DELTA[h];
     return this.get(x + d.dx, y + d.dy);
   }
+}
+
+/**
+ * The direction a tunnel sends the train out: toward an adjacent goal or
+ * connecting rail, so it always exits onto track instead of off the board (a
+ * fixed authored mouth could point at the edge and crash on emerge). Falls back
+ * to the authored mouth if nothing is connected. Shared by the sim (emerge
+ * heading), the renderer (machine facing) and the route preview so all three
+ * agree.
+ */
+export function tunnelExitDir(grid: Grid, t: Cell): Heading | null {
+  for (const h of HEADINGS) {
+    const nb = grid.neighbor(t.x, t.y, h);
+    if (!nb || nb.type === 'tunnel') continue;
+    if (nb.type === 'exit' || hasEdge(nb.mask, OPPOSITE[h])) return h;
+  }
+  return edgeList(t.mask)[0] ?? null;
 }
