@@ -19,6 +19,10 @@ import { Grid } from './grid.js';
 import { Editor } from './editor.js';
 import { Simulation } from './sim.js';
 import { validateLevel } from './levelValidate.js';
+import { buildGrid } from './level.js';
+import { resolveTarget, Tutorial } from './tutorial.js';
+import { TUTORIALS } from './tutorialData.js';
+import { LEVEL_LIBRARY } from './levelData.js';
 import type { Level } from './level.js';
 import type { Heading } from './types.js';
 
@@ -539,6 +543,77 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
       }),
     ) > 0,
   );
+}
+
+/* ----------------------------- tutorial ----------------------------- */
+{
+  // A tiny level with one rock, one wagon, one mover, an exit, a tunnel pair.
+  const lv = {
+    id: 't-1',
+    world: 1,
+    name: 'tut',
+    grid: { cols: 6, rows: 3 },
+    trackBudget: 5,
+    locomotive: { x: 0, y: 1, heading: 'E' },
+    fixedTiles: [
+      { x: 5, y: 1, type: 'exit', heading: 'W' },
+      { x: 2, y: 0, type: 'rock' },
+      { x: 1, y: 2, type: 'tunnel', edges: ['E'], pairId: 1 },
+      { x: 3, y: 2, type: 'tunnel', edges: ['W'], pairId: 1 },
+    ],
+    wagons: [{ x: 3, y: 1, number: 1 }],
+    movers: [{ x: 4, y: 2, heading: 'N' }],
+    objectives: { couple: 'all-in-order', passengers: 0 },
+  } as unknown as Level;
+  const g = buildGrid(lv);
+
+  eq('resolveTarget tile rock', resolveTarget({ tile: 'rock' }, g, lv), [{ x: 2, y: 0 }]);
+  eq('resolveTarget tile tunnel (both)', resolveTarget({ tile: 'tunnel' }, g, lv), [{ x: 1, y: 2 }, { x: 3, y: 2 }]);
+  eq('resolveTarget entity wagon', resolveTarget({ entity: 'wagon' }, g, lv), [{ x: 3, y: 1 }]);
+  eq('resolveTarget entity mover', resolveTarget({ entity: 'mover' }, g, lv), [{ x: 4, y: 2 }]);
+  eq('resolveTarget explicit cells', resolveTarget({ cells: [{ x: 2, y: 2 }] }, g, lv), [{ x: 2, y: 2 }]);
+
+  const tut = new Tutorial();
+  ok('tutorial inactive before start', !tut.active());
+  tut.start({ steps: [
+    { text: 'one', target: { tile: 'rock' } },
+    { text: 'two', target: { tile: 'exit' } },
+  ] }, g, lv);
+  ok('tutorial active after start', tut.active());
+  eq('tutorial step1 text', tut.text(), 'one');
+  eq('tutorial step1 cells', tut.cells(), [{ x: 2, y: 0 }]);
+  eq('tutorial stepInfo 1/2', tut.stepInfo(), { index: 1, total: 2 });
+  ok('tutorial step1 not last', !tut.isLast());
+  ok('tutorial next advances', tut.next() === true);
+  eq('tutorial step2 text', tut.text(), 'two');
+  eq('tutorial step2 cells', tut.cells(), [{ x: 5, y: 1 }]);
+  ok('tutorial step2 is last', tut.isLast());
+  ok('tutorial next past end returns false', tut.next() === false);
+  ok('tutorial inactive after finishing', !tut.active());
+
+  const tut2 = new Tutorial();
+  tut2.start({ steps: [{ text: 'solo', target: { tile: 'rock' } }] }, g, lv);
+  ok('single-step tutorial is last immediately', tut2.isLast());
+  tut2.end();
+  ok('tutorial inactive after end()', !tut2.active());
+
+  // Authored scripts: every key is a real level, and every non-explicit target
+  // resolves to at least one cell on that level.
+  {
+    const byId = new Map(LEVEL_LIBRARY.map((l) => [l.id, l]));
+    for (const [id, script] of Object.entries(TUTORIALS)) {
+      const level = byId.get(id);
+      ok(`tutorial ${id}: level exists`, !!level);
+      ok(`tutorial ${id}: has steps`, script.steps.length > 0);
+      if (!level) continue;
+      const grid = buildGrid(level);
+      script.steps.forEach((s, i) => {
+        const cells = resolveTarget(s.target, grid, level);
+        ok(`tutorial ${id} step ${i + 1}: resolves to >=1 cell`, cells.length > 0);
+      });
+    }
+    eq('tutorial keys', Object.keys(TUTORIALS).sort(), ['1-2', '1-3', '2-1', '3-1', '4-1', '4-3']);
+  }
 }
 
 /* ----------------------------- report ----------------------------- */

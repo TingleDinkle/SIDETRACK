@@ -134,6 +134,10 @@ export class Renderer {
   private assets: AssetManager | null = null;
   private theme = 1; // world number, selects ground_w{theme}
   private hoverCell: { x: number; y: number } | null = null; // editor targeting reticle
+  // Tutorial spotlight: an offscreen snapshot of the un-blurred frame, so the
+  // highlighted cells can be redrawn crisp over the blurred-and-dimmed board.
+  private sharp: HTMLCanvasElement | null = null;
+  private sharpCtx: CanvasRenderingContext2D | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -435,6 +439,70 @@ export class Renderer {
       ctx.fillText('❄', cx, cy - cell * 0.3);
     }
     ctx.restore();
+  }
+
+  /** Tutorial focus: blur + dim the whole board, then redraw the given cells
+   *  crisp with a soft glowing ring. Called once per frame after draw(). */
+  drawTutorialSpotlight(cells: { x: number; y: number }[], tMs: number): void {
+    const ctx = this.ctx;
+    const W = this.canvas.width; // device px
+    const H = this.canvas.height;
+    if (W === 0 || H === 0) return;
+
+    // (Re)allocate the offscreen snapshot to match the backing store.
+    if (!this.sharp || this.sharp.width !== W || this.sharp.height !== H) {
+      this.sharp = document.createElement('canvas');
+      this.sharp.width = W;
+      this.sharp.height = H;
+      this.sharpCtx = this.sharp.getContext('2d');
+      if (!this.sharpCtx) this.sharp = null; // failed alloc — retry next frame
+    }
+    const sc = this.sharpCtx;
+    if (!sc || !this.sharp) return;
+    const snap = this.sharp;
+
+    // 1) Snapshot the finished frame (identity transform, device px).
+    sc.setTransform(1, 0, 0, 1, 0, 0);
+    sc.clearRect(0, 0, W, H);
+    sc.drawImage(this.canvas, 0, 0);
+
+    // 2) Blur the visible board, then 3) dim it — both in device space.
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.filter = `blur(${Math.max(2, Math.round(6 * this.dpr))}px)`;
+    ctx.drawImage(snap, 0, 0);
+    ctx.filter = 'none';
+    ctx.fillStyle = 'rgba(10,12,20,0.45)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore(); // back to the DPR transform
+
+    // 4) Punch each highlighted cell back to crisp (no blur, no dim).
+    const { cssW, cssH } = this.layout;
+    for (const c of cells) {
+      const { left, top, size } = this.cellRect(c.x, c.y);
+      const pad = size * 0.06;
+      ctx.save();
+      this.roundRect(left - pad, top - pad, size + pad * 2, size + pad * 2, size * 0.18);
+      ctx.clip();
+      // Source = full device snapshot; dest = full CSS board → lands 1:1 in device px.
+      ctx.drawImage(snap, 0, 0, W, H, 0, 0, cssW, cssH);
+      ctx.restore();
+    }
+
+    // 5) A gently-pulsing warm ring around each window.
+    const pulse = 0.5 + 0.5 * Math.sin(tMs * 0.005);
+    for (const c of cells) {
+      const { left, top, size } = this.cellRect(c.x, c.y);
+      const pad = size * 0.06;
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,226,122,${0.55 + 0.35 * pulse})`;
+      ctx.lineWidth = Math.max(2, size * 0.05);
+      ctx.shadowColor = 'rgba(255,226,122,0.85)';
+      ctx.shadowBlur = size * (0.18 + 0.12 * pulse);
+      this.roundRect(left - pad, top - pad, size + pad * 2, size + pad * 2, size * 0.18);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   /* ----------------------------- particles ----------------------------- */

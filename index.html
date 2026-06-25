@@ -183,6 +183,31 @@
       #outcome .row { display: flex; gap: 8px; justify-content: center; }
       #outcome .row button { flex: 1 1 0; min-height: 52px; }
 
+      /* ---- tutorial caption + spotlight ---- */
+      #tutorial {
+        position: absolute; inset: 0; display: none; align-items: flex-end; justify-content: center;
+        padding: 18px; pointer-events: none; z-index: 9;
+      }
+      #tutorial.show { display: flex; }
+      #tutorial .tut-card {
+        pointer-events: auto; width: 100%; max-width: 420px; text-align: center;
+        padding: 14px 16px 12px; animation: pop 0.28s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+      }
+      #tut-text { color: #18324a; font-weight: 600; font-size: 15px; line-height: 1.35; margin: 0 0 12px; }
+      #tutorial .tut-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .tut-dots { color: #2b4a66; font-size: 14px; letter-spacing: 3px; }
+      .tut-btns { display: flex; gap: 8px; }
+      #tutorial .tut-btns button { min-height: 46px; padding: 0 16px; }
+      #btn-help {
+        position: absolute; top: 10px; right: 10px; z-index: 7;
+        display: none; align-items: center; justify-content: center;
+        width: 38px; height: 38px; border-radius: 999px; padding: 0;
+        font-size: 18px; font-weight: 800; line-height: 1;
+        background: rgba(16, 20, 32, 0.9); color: #ffe27a;
+        border: 1px solid rgba(255, 255, 255, 0.14); cursor: pointer;
+      }
+      #btn-help.show { display: flex; }
+
       /* ============================================================ *
        *  META SHELL — full-screen menu screens + bottom tab nav
        * ============================================================ */
@@ -549,6 +574,19 @@
             </div>
           </div>
         </div>
+        <div id="tutorial">
+          <div class="tut-card s9 s-cyan">
+            <p id="tut-text"></p>
+            <div class="tut-foot">
+              <span id="tut-dots" class="tut-dots"></span>
+              <span class="tut-btns">
+                <button id="tut-skip" class="s9 s-navy">Skip</button>
+                <button id="tut-next" class="primary s9 s-yellow">Next ▶</button>
+              </span>
+            </div>
+          </div>
+        </div>
+        <button id="btn-help" title="Show tutorial">?</button>
       </main>
 
       <div id="boosters"></div>
