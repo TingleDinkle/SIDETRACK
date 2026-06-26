@@ -663,6 +663,19 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
     { x: 2, y: 3, edges: ['W', 'E'] },
     { x: 5, y: 3, edges: ['W', 'E'] },
   ]) === 'lost');
+  // Driving straight east couples wagon 3 (the leftmost) first — out of order.
+  ok('5-4 straight-east loses (order)', outcomeOf('5-4', [
+    { x: 1, y: 1, edges: ['W', 'E'] },
+    { x: 2, y: 1, edges: ['W', 'E'] },
+    { x: 3, y: 1, edges: ['W', 'E'] },
+  ]) === 'lost');
+  // Rushing the crossing meets the trolley head-on.
+  ok('5-5 naive rush collides (loses)', outcomeOf('5-5', [
+    { x: 1, y: 3, edges: ['W', 'E'] },
+    { x: 2, y: 3, edges: ['W', 'E'] },
+    { x: 6, y: 3, edges: ['W', 'E'] },
+    { x: 7, y: 3, edges: ['W', 'E'] },
+  ]) === 'lost');
 }
 
 /* ----------------------------- level store: new shipped worlds reach returning players ----------------------------- */
