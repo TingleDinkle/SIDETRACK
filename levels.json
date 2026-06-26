@@ -203,7 +203,8 @@
         {
           "x": 2,
           "y": 1,
-          "number": 1
+          "number": 1,
+          "heading": "S"
         }
       ],
       "objectives": {
@@ -231,7 +232,7 @@
           "y": 1,
           "type": "tunnel",
           "edges": [
-            "W"
+            "S"
           ],
           "pairId": 1
         },
@@ -245,7 +246,7 @@
           "y": 1,
           "type": "tunnel",
           "edges": [
-            "E"
+            "N"
           ],
           "pairId": 1
         },
@@ -288,7 +289,7 @@
           "y": 1,
           "type": "tunnel",
           "edges": [
-            "W"
+            "S"
           ],
           "pairId": 1
         },
@@ -302,7 +303,7 @@
           "y": 1,
           "type": "tunnel",
           "edges": [
-            "E"
+            "N"
           ],
           "pairId": 1
         },
@@ -350,7 +351,7 @@
           "y": 0,
           "type": "tunnel",
           "edges": [
-            "W"
+            "S"
           ],
           "pairId": 1
         },
@@ -359,7 +360,7 @@
           "y": 4,
           "type": "tunnel",
           "edges": [
-            "W"
+            "S"
           ],
           "pairId": 1
         },
@@ -718,7 +719,7 @@
           "y": 1,
           "type": "tunnel",
           "edges": [
-            "W"
+            "S"
           ],
           "pairId": 1
         },
@@ -727,7 +728,7 @@
           "y": 1,
           "type": "tunnel",
           "edges": [
-            "E"
+            "N"
           ],
           "pairId": 1
         },
@@ -757,12 +758,14 @@
         {
           "x": 4,
           "y": 1,
-          "number": 1
+          "number": 1,
+          "heading": "E"
         },
         {
           "x": 2,
           "y": 1,
-          "number": 2
+          "number": 2,
+          "heading": "S"
         }
       ],
       "objectives": {
@@ -908,7 +911,7 @@
           "y": 0,
           "type": "tunnel",
           "edges": [
-            "S"
+            "W"
           ],
           "pairId": 1
         },
@@ -917,7 +920,7 @@
           "y": 0,
           "type": "tunnel",
           "edges": [
-            "S"
+            "E"
           ],
           "pairId": 1
         }

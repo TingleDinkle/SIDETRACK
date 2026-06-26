@@ -1,10 +1,9 @@
 /**
- * The level library — 16 original levels across 5 worlds. Worlds 1–4 each
+ * The level library — 18 original levels across 5 worlds. Worlds 1–4 each
  * introduce one mechanic; World 5 (Kishotenketsu) composes several per level.
- * Authored as type-checked TypeScript (the source of
- * truth); `levels.json` is generated from this at build time and loaded at
- * runtime via the JSON loader (see levelLoader.ts), with this array as the
- * offline fallback.
+ * Authored as type-checked TypeScript (the source of truth); `levels.json` is
+ * generated from this at build time and loaded at runtime via the JSON loader
+ * (see levelLoader.ts), with this array as the offline fallback.
  *
  * Every level here has a verified solution in `leveltest.ts`, so the whole
  * library is guaranteed solvable within budget by `npm test`.
@@ -68,7 +67,9 @@ export const LEVEL_LIBRARY = [
         grid: { cols: 7, rows: 3 },
         trackBudget: 5,
         locomotive: { x: 0, y: 1, heading: 'E' },
-        fixedTiles: [{ x: 6, y: 1, type: 'exit', heading: 'W' }],
+        fixedTiles: [
+            { x: 6, y: 1, type: 'exit', heading: 'W' },
+        ],
         wagons: [
             { x: 2, y: 1, number: 1 },
             { x: 4, y: 1, number: 2 },
@@ -82,8 +83,10 @@ export const LEVEL_LIBRARY = [
         grid: { cols: 5, rows: 3 },
         trackBudget: 6,
         locomotive: { x: 0, y: 0, heading: 'E' },
-        fixedTiles: [{ x: 0, y: 2, type: 'exit', heading: 'E' }],
-        wagons: [{ x: 2, y: 1, number: 1 }],
+        fixedTiles: [
+            { x: 0, y: 2, type: 'exit', heading: 'E' },
+        ],
+        wagons: [{ x: 2, y: 1, number: 1, heading: 'S' }],
         objectives: { couple: 'all-in-order', passengers: 0 },
     },
     /* ----------------------------- World 2 ----------------------------- */
@@ -95,9 +98,9 @@ export const LEVEL_LIBRARY = [
         trackBudget: 3,
         locomotive: { x: 0, y: 1, heading: 'E' },
         fixedTiles: [
-            { x: 3, y: 1, type: 'tunnel', edges: ['W'], pairId: 1 },
+            { x: 3, y: 1, type: 'tunnel', edges: ['S'], pairId: 1 },
             { x: 4, y: 1, type: 'rock' },
-            { x: 5, y: 1, type: 'tunnel', edges: ['E'], pairId: 1 },
+            { x: 5, y: 1, type: 'tunnel', edges: ['N'], pairId: 1 },
             { x: 6, y: 1, type: 'exit', heading: 'W' },
         ],
         wagons: [{ x: 2, y: 1, number: 1 }],
@@ -111,9 +114,9 @@ export const LEVEL_LIBRARY = [
         trackBudget: 3,
         locomotive: { x: 0, y: 1, heading: 'E' },
         fixedTiles: [
-            { x: 2, y: 1, type: 'tunnel', edges: ['W'], pairId: 1 },
+            { x: 2, y: 1, type: 'tunnel', edges: ['S'], pairId: 1 },
             { x: 3, y: 1, type: 'rock' },
-            { x: 4, y: 1, type: 'tunnel', edges: ['E'], pairId: 1 },
+            { x: 4, y: 1, type: 'tunnel', edges: ['N'], pairId: 1 },
             { x: 6, y: 1, type: 'exit', heading: 'W' },
         ],
         wagons: [
@@ -130,10 +133,8 @@ export const LEVEL_LIBRARY = [
         trackBudget: 3,
         locomotive: { x: 0, y: 0, heading: 'E' },
         fixedTiles: [
-            // Enter the top tunnel heading east; both openings face west, so the train
-            // spits out of the bottom tunnel heading west, on toward the goal.
-            { x: 2, y: 0, type: 'tunnel', edges: ['W'], pairId: 1 },
-            { x: 2, y: 4, type: 'tunnel', edges: ['W'], pairId: 1 },
+            { x: 2, y: 0, type: 'tunnel', edges: ['S'], pairId: 1 },
+            { x: 2, y: 4, type: 'tunnel', edges: ['S'], pairId: 1 },
             { x: 0, y: 4, type: 'exit', heading: 'E' },
         ],
         wagons: [],
@@ -246,14 +247,14 @@ export const LEVEL_LIBRARY = [
         locomotive: { x: 0, y: 1, heading: 'E' },
         fixedTiles: [
             { x: 2, y: 0, type: 'exit', heading: 'S' },
-            { x: 1, y: 1, type: 'tunnel', edges: ['W'], pairId: 1 },
-            { x: 3, y: 1, type: 'tunnel', edges: ['E'], pairId: 1 },
+            { x: 1, y: 1, type: 'tunnel', edges: ['S'], pairId: 1 },
+            { x: 3, y: 1, type: 'tunnel', edges: ['N'], pairId: 1 },
             { x: 3, y: 2, type: 'gate', edges: ['W', 'E'], color: 'red', open: false },
             { x: 4, y: 2, type: 'button', edges: ['N', 'W'], color: 'red' },
         ],
         wagons: [
-            { x: 4, y: 1, number: 1 },
-            { x: 2, y: 1, number: 2 },
+            { x: 4, y: 1, number: 1, heading: 'E' },
+            { x: 2, y: 1, number: 2, heading: 'S' },
         ],
         objectives: { couple: 'all-in-order', passengers: 0 },
     },
@@ -266,15 +267,11 @@ export const LEVEL_LIBRARY = [
         locomotive: { x: 0, y: 3, heading: 'E' },
         fixedTiles: [
             { x: 6, y: 3, type: 'exit', heading: 'W' },
-            // The trolley falls down column 3; the crossing is at (3,3). A straight rush
-            // along row 3 reaches it the same tick the trolley does — collision.
             { x: 3, y: 0, type: 'track', edges: ['S'] },
             { x: 3, y: 1, type: 'track', edges: ['N', 'S'] },
             { x: 3, y: 2, type: 'track', edges: ['N', 'S'] },
             { x: 3, y: 3, type: 'track', edges: ['N', 'E', 'S', 'W'] },
             { x: 3, y: 4, type: 'track', edges: ['N'] },
-            // The button is up a side shaft: arming the gate also costs the ticks that let
-            // the trolley clear the crossing first — one detour solves gate AND timing.
             { x: 1, y: 1, type: 'button', edges: ['S', 'E'], color: 'red' },
             { x: 4, y: 3, type: 'gate', edges: ['W', 'E'], color: 'red', open: false },
         ],
@@ -294,10 +291,8 @@ export const LEVEL_LIBRARY = [
         locomotive: { x: 0, y: 1, heading: 'E' },
         fixedTiles: [
             { x: 3, y: 0, type: 'exit', heading: 'S' },
-            // The wagons run 3,2,1 left-to-right: drive straight and you couple #3 first.
-            // The tunnels (mouths facing down) drop you at the far end on #1 to sweep back.
-            { x: 1, y: 0, type: 'tunnel', edges: ['S'], pairId: 1 },
-            { x: 6, y: 0, type: 'tunnel', edges: ['S'], pairId: 1 },
+            { x: 1, y: 0, type: 'tunnel', edges: ['W'], pairId: 1 },
+            { x: 6, y: 0, type: 'tunnel', edges: ['E'], pairId: 1 },
         ],
         wagons: [
             { x: 6, y: 1, number: 1 },
@@ -315,14 +310,11 @@ export const LEVEL_LIBRARY = [
         locomotive: { x: 0, y: 3, heading: 'E' },
         fixedTiles: [
             { x: 8, y: 3, type: 'exit', heading: 'W' },
-            // Trolley shaft, crossing at (3,3): a straight rush meets it on the same tick.
             { x: 3, y: 0, type: 'track', edges: ['S'] },
             { x: 3, y: 1, type: 'track', edges: ['N', 'S'] },
             { x: 3, y: 2, type: 'track', edges: ['N', 'S'] },
             { x: 3, y: 3, type: 'track', edges: ['N', 'E', 'S', 'W'] },
             { x: 3, y: 4, type: 'track', edges: ['N'] },
-            // Arming the gate (button up the side shaft) also spends the ticks that let
-            // the trolley clear — one detour solves timing AND the gate. Then couple 1,2,3.
             { x: 1, y: 1, type: 'button', edges: ['S', 'E'], color: 'red' },
             { x: 5, y: 3, type: 'gate', edges: ['W', 'E'], color: 'red', open: false },
         ],
