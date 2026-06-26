@@ -26,6 +26,29 @@ python -m http.server  # then open http://localhost:8000
 
 Open `index.html`. On a phone it fills the screen; on desktop it's centered.
 
+## Deploy to the web (Vercel)
+
+It's a pure static site — `index.html` plus the committed `dist/`, `levels.json`
+and `assets/`. There's no server and no backend (saves live in `localStorage`),
+so hosting is just "serve the folder".
+
+The included [`vercel.json`](vercel.json) tells Vercel to skip install/build and
+serve the repo root as static files (the compiled `dist/` is already committed):
+
+```bash
+npm i -g vercel
+vercel          # first run: log in + answer the prompts, then it gives you a URL
+vercel --prod   # promote to production
+```
+
+Or import the GitHub repo at vercel.com → **New Project** (Framework: **Other**).
+The one thing that matters: **Output Directory is the repo root (`.`)**, because
+`index.html` lives at the top and references `./dist/`, `./assets/`, `./levels.json`
+— pointing it at `dist/` would 404. To rebuild from source on every deploy instead
+of serving the committed output, set `buildCommand` to `npm run build` in
+`vercel.json`. The same static setup works on Netlify, GitHub Pages, or Cloudflare
+Pages (publish directory = root).
+
 ## Build from source
 
 ```bash
