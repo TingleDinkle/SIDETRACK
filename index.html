@@ -551,6 +551,17 @@
       @media (max-width: 560px) {
         .ed-body { flex-direction: column; }
         .ed-sidebar { flex: 0 0 auto; max-height: 30vh; }
+        /* Phones have a short board area, so a desktop-size caption swallows the
+           whole board and hides the very thing it's highlighting. Make it a slim
+           card; combined with auto-flip (pin-top), the spotlit object stays visible. */
+        #tutorial { padding: 8px; }
+        #tutorial .tut-card { border-width: 16px; border-image-width: 16px; padding: 6px 10px; }
+        #tut-text { font-size: 13px; line-height: 1.28; margin: 0 0 8px; }
+        .tut-dots { font-size: 13px; letter-spacing: 2px; }
+        #tutorial .tut-foot { gap: 8px; }
+        #tutorial .tut-btns { gap: 8px; }
+        #tutorial .tut-btns button { min-height: 40px; padding: 0 14px; font-size: 14px; }
+        #tutorial.single #tut-next { min-width: 148px; min-height: 44px; padding: 0 18px; font-size: 15.5px; }
       }
     </style>
   </head>

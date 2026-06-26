@@ -173,6 +173,7 @@ export class Game {
     const script = TUTORIALS[this.level.id];
     if (!script) {
       this.hud.tutorial.panel.classList.remove('show');
+      this.renderer.setReservedBottom(0); // no caption → board gets the full stage
       return;
     }
     this.tutorial.start(script, this.grid, this.level);
@@ -195,6 +196,19 @@ export class Game {
     // Single-step caption: no Skip and a lone dot, so centre the big "Got it" button.
     o.panel.classList.toggle('single', total === 1);
     o.panel.classList.add('show');
+    this.reserveForCaption();
+  }
+
+  /** On a small screen, reserve the caption's height so the board re-lays ABOVE it
+   *  (otherwise a tall card swallows the board and hides the spotlit object). */
+  private reserveForCaption(): void {
+    const o = this.hud.tutorial;
+    if (!this.tutorial.active()) { this.renderer.setReservedBottom(0); return; }
+    const L = this.renderer.layout;
+    const small = L.cssW < 560 || L.cssH < 480; // phone-ish (portrait or short landscape)
+    const card = o.panel.firstElementChild as HTMLElement | null;
+    const cardH = card ? card.offsetHeight : 0;
+    this.renderer.setReservedBottom(small && cardH ? cardH + 24 : 0);
   }
 
   /** Advance one step, or finish (and resume normal play) on the last step. */
@@ -212,6 +226,7 @@ export class Game {
   private endTutorial(): void {
     this.tutorial.end();
     this.hud.tutorial.panel.classList.remove('show');
+    this.renderer.setReservedBottom(0); // give the board the full stage back
     if (this.state === 'editing') this.input.setEnabled(true);
     this.updateControls();
   }
@@ -535,6 +550,7 @@ export class Game {
 
   private resize(): void {
     this.renderer.resize(this.grid.cols, this.grid.rows);
+    if (this.tutorial.active()) this.reserveForCaption(); // re-fit on rotate / resize
   }
 
   private onEdited(): void {

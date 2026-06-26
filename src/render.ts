@@ -134,6 +134,7 @@ export class Renderer {
   private assets: AssetManager | null = null;
   private theme = 1; // world number, selects ground_w{theme}
   private hoverCell: { x: number; y: number } | null = null; // editor targeting reticle
+  private reservedBottom = 0; // px kept clear at the bottom (for the tutorial caption)
   // Tutorial spotlight: an offscreen snapshot of the un-blurred frame, so the
   // highlighted cells can be redrawn crisp over the blurred-and-dimmed board.
   private sharp: HTMLCanvasElement | null = null;
@@ -176,8 +177,11 @@ export class Renderer {
     this.canvas.height = Math.round(cssH * this.dpr);
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
-    const pad = Math.max(8, Math.min(cssW, cssH) * 0.03);
-    const cell = Math.floor(Math.min((cssW - pad * 2) / cols, (cssH - pad * 2) / rows));
+    // Lay the board into the height NOT reserved for the tutorial caption, so the
+    // spotlit object is never hidden behind the card on a short screen.
+    const availH = Math.max(40, cssH - this.reservedBottom);
+    const pad = Math.max(8, Math.min(cssW, availH) * 0.03);
+    const cell = Math.floor(Math.min((cssW - pad * 2) / cols, (availH - pad * 2) / rows));
     const boardW = cell * cols;
     const boardH = cell * rows;
     this.layout = {
@@ -185,10 +189,18 @@ export class Renderer {
       cols,
       rows,
       ox: Math.floor((cssW - boardW) / 2),
-      oy: Math.floor((cssH - boardH) / 2),
+      oy: Math.floor((availH - boardH) / 2),
       cssW,
       cssH,
     };
+  }
+
+  /** Reserve `px` at the bottom of the stage for the tutorial caption; the board
+   *  re-lays into the space above it. 0 restores the full stage. */
+  setReservedBottom(px: number): void {
+    if (px === this.reservedBottom) return;
+    this.reservedBottom = px;
+    this.resize(this.layout.cols, this.layout.rows);
   }
 
   /** Map client (page) coordinates to a grid cell, or null if outside. */
