@@ -24,7 +24,10 @@ import { buildGrid } from './level.js';
 import { resolveTarget, Tutorial } from './tutorial.js';
 import { TUTORIALS } from './tutorialData.js';
 import { LEVEL_LIBRARY } from './levelData.js';
+import { mergeMissingDefaults } from './levelStore.js';
+import type { Bundle } from './levelStore.js';
 import type { Level } from './level.js';
+import type { World } from './levelData.js';
 import type { Heading } from './types.js';
 
 // Minimal ambient for Node's exit code, so we don't need @types/node here.
@@ -660,6 +663,28 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
     { x: 2, y: 3, edges: ['W', 'E'] },
     { x: 5, y: 3, edges: ['W', 'E'] },
   ]) === 'lost');
+}
+
+/* ----------------------------- level store: new shipped worlds reach returning players ----------------------------- */
+{
+  const mkW = (id: number): World => ({ id, name: 'World ' + id, blurb: '' });
+  const mkL = (id: string, world: number): Level => ({
+    id, world, name: id, grid: { cols: 5, rows: 3 }, trackBudget: 4,
+    locomotive: { x: 0, y: 1, heading: 'E' }, fixedTiles: [{ x: 4, y: 1, type: 'exit', heading: 'W' }],
+    objectives: { couple: 'all-in-order', passengers: 0 },
+  });
+  // A cache written before World 5 existed; the shipped defaults now include it.
+  const loaded: Bundle = { worlds: [mkW(1), mkW(2), mkW(3), mkW(4)], levels: [mkL('4-3', 4)] };
+  const defaults: Bundle = { worlds: [mkW(1), mkW(2), mkW(3), mkW(4), mkW(5)], levels: [mkL('4-3', 4), mkL('5-1', 5), mkL('5-2', 5), mkL('5-3', 5)] };
+  const { bundle, added } = mergeMissingDefaults(loaded, defaults);
+  eq('store merge: adds World 5 to a returning player', bundle.worlds.map((w) => w.id), [1, 2, 3, 4, 5]);
+  eq('store merge: adds the 3 new levels', bundle.levels.map((l) => l.id), ['4-3', '5-1', '5-2', '5-3']);
+  eq('store merge: added count', added, 4);
+  // Player edits to an existing cached level are preserved (not clobbered by defaults).
+  const editCache: Bundle = { worlds: [mkW(1)], levels: [{ ...mkL('1-1', 1), name: 'PLAYER EDIT' }] };
+  const m2 = mergeMissingDefaults(editCache, { worlds: [mkW(1)], levels: [mkL('1-1', 1)] });
+  eq('store merge: keeps player edits to existing levels', m2.bundle.levels[0].name, 'PLAYER EDIT');
+  eq('store merge: adds nothing when all ids present', m2.added, 0);
 }
 
 /* ----------------------------- report ----------------------------- */
