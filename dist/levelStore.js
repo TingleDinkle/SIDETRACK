@@ -10,6 +10,28 @@
 import { validateLevel } from './levelLoader.js';
 const KEY = 'sidetrack.levels.v1';
 const clone = (v) => JSON.parse(JSON.stringify(v));
+/**
+ * Reconcile a cached library with the shipped defaults: add any shipped worlds or
+ * levels the cache is missing (matched by id), so newly-shipped content (a new
+ * world, extra levels) reaches RETURNING players too — not just fresh installs.
+ * Existing cached levels (including the player's editor changes) are kept as-is.
+ * Pure + side-effect free so it can be unit-tested in Node.
+ */
+export function mergeMissingDefaults(loaded, defaults) {
+    const worldIds = new Set(loaded.worlds.map((w) => w.id));
+    const levelIds = new Set(loaded.levels.map((l) => l.id));
+    const worlds = loaded.worlds.slice();
+    const levels = loaded.levels.slice();
+    let added = 0;
+    for (const w of defaults.worlds)
+        if (!worldIds.has(w.id))
+            (worlds.push(clone(w)), added++);
+    for (const l of defaults.levels)
+        if (!levelIds.has(l.id))
+            (levels.push(clone(l)), added++);
+    worlds.sort((a, b) => a.id - b.id);
+    return { bundle: { worlds, levels }, added };
+}
 export function blankLevel(id, world) {
     return {
         id,
@@ -30,8 +52,13 @@ export class LevelStore {
         this.defaults = defaults;
         const loaded = this.read();
         if (loaded && loaded.levels.length) {
-            this.worldList = loaded.worlds;
-            this.levelList = loaded.levels;
+            // Fold in any worlds/levels added to the shipped library since this cache was
+            // written, so a returning player sees new content (e.g. a new world) on reload.
+            const { bundle, added } = mergeMissingDefaults(loaded, defaults);
+            this.worldList = bundle.worlds;
+            this.levelList = bundle.levels;
+            if (added)
+                this.persist();
         }
         else {
             this.worldList = clone(defaults.worlds);

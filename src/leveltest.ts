@@ -97,6 +97,41 @@ const SOLUTIONS: Record<string, Seg[]> = {
     { x: 1, y: 2, edges: ['E', 'W'] },
     { x: 3, y: 2, edges: ['E', 'W'] },
   ],
+  '5-1': [
+    { x: 1, y: 1, edges: ['W', 'N'] },
+    { x: 2, y: 0, edges: ['W', 'S'] },
+    { x: 2, y: 1, edges: ['N', 'E'] },
+    { x: 3, y: 1, edges: ['W', 'E'] },
+  ],
+  '5-2': [
+    { x: 4, y: 1, edges: ['W', 'S'] },
+    { x: 2, y: 2, edges: ['E', 'N'] },
+    { x: 2, y: 1, edges: ['S', 'N'] },
+  ],
+  '5-3': [
+    { x: 1, y: 3, edges: ['W', 'N'] },
+    { x: 1, y: 2, edges: ['N', 'S'] },
+    { x: 2, y: 1, edges: ['W', 'S'] },
+    { x: 2, y: 2, edges: ['N', 'S'] },
+    { x: 2, y: 3, edges: ['N', 'E'] },
+    { x: 5, y: 3, edges: ['W', 'E'] },
+  ],
+  '5-4': [
+    { x: 1, y: 1, edges: ['W', 'N'] },
+    { x: 6, y: 1, edges: ['N', 'W'] },
+    { x: 5, y: 1, edges: ['E', 'W'] },
+    { x: 4, y: 1, edges: ['E', 'W'] },
+    { x: 3, y: 1, edges: ['E', 'N'] },
+  ],
+  '5-5': [
+    { x: 1, y: 3, edges: ['W', 'N'] },
+    { x: 1, y: 2, edges: ['N', 'S'] },
+    { x: 2, y: 1, edges: ['W', 'S'] },
+    { x: 2, y: 2, edges: ['N', 'S'] },
+    { x: 2, y: 3, edges: ['N', 'E'] },
+    { x: 6, y: 3, edges: ['W', 'E'] },
+    { x: 7, y: 3, edges: ['W', 'E'] },
+  ],
 };
 
 for (const level of LEVEL_LIBRARY) {

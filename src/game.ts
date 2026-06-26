@@ -192,6 +192,8 @@ export class Game {
     o.dots.textContent = Array.from({ length: total }, (_, i) => (i + 1 === index ? '●' : '○')).join(' ');
     o.btnNext.textContent = this.tutorial.isLast() ? 'Got it ▶' : 'Next ▶';
     o.btnSkip.style.display = total > 1 ? '' : 'none'; // a single-step tutorial only needs "Got it"
+    // Single-step caption: no Skip and a lone dot, so centre the big "Got it" button.
+    o.panel.classList.toggle('single', total === 1);
     o.panel.classList.add('show');
   }
 

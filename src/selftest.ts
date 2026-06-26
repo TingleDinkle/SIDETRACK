@@ -10,6 +10,7 @@
 import {
   EdgeBit,
   OPPOSITE,
+  addEdge,
   edgeCount,
   hasEdge,
   headingBetween,
@@ -23,7 +24,10 @@ import { buildGrid } from './level.js';
 import { resolveTarget, Tutorial } from './tutorial.js';
 import { TUTORIALS } from './tutorialData.js';
 import { LEVEL_LIBRARY } from './levelData.js';
+import { mergeMissingDefaults } from './levelStore.js';
+import type { Bundle } from './levelStore.js';
 import type { Level } from './level.js';
+import type { World } from './levelData.js';
 import type { Heading } from './types.js';
 
 // Minimal ambient for Node's exit code, so we don't need @types/node here.
@@ -614,6 +618,86 @@ eq('exit junction branch 1', exitEdge(EdgeBit.N | EdgeBit.E | EdgeBit.S, 'N', 1)
     }
     eq('tutorial keys', Object.keys(TUTORIALS).sort(), ['1-2', '1-3', '2-1', '3-1', '4-1', '4-3']);
   }
+}
+
+/* ----------------------------- World 5: validation + anti-solutions ----------------------------- */
+{
+  // (a) Every authored level validates with zero errors.
+  for (const lv of LEVEL_LIBRARY) {
+    const errs = validateLevel(lv).filter((i) => i.level === 'error');
+    ok(`validate library: ${lv.id} has no errors`, errs.length === 0);
+  }
+
+  // (b) Anti-solutions: the tempting naive layout for each World-5 level must LOSE,
+  //     so the intended puzzle can't be cheesed. Lay the segments and run to a halt.
+  type AntiSeg = { x: number; y: number; edges: Heading[] };
+  const outcomeOf = (id: string, segs: AntiSeg[]): string => {
+    const level = LEVEL_LIBRARY.find((l) => l.id === id);
+    if (!level) return 'no-level';
+    const grid = buildGrid(level);
+    for (const s of segs) {
+      const c = grid.get(s.x, s.y);
+      if (!c || c.fixed || c.type !== 'empty') return 'unplaceable';
+      c.type = 'track';
+      let m = 0;
+      for (const e of s.edges) m = addEdge(m, e);
+      c.mask = m;
+    }
+    const sim = new Simulation(grid, level);
+    let n = 0;
+    while (sim.status === 'running' && n++ < 500) sim.tick();
+    return sim.status;
+  };
+
+  ok('5-1 naive straight line loses', outcomeOf('5-1', [
+    { x: 1, y: 1, edges: ['W', 'E'] },
+    { x: 2, y: 1, edges: ['W', 'E'] },
+    { x: 3, y: 1, edges: ['W', 'E'] },
+  ]) === 'lost');
+  ok('5-2 emerge-straight loses', outcomeOf('5-2', [
+    { x: 4, y: 1, edges: ['W', 'E'] },
+  ]) === 'lost');
+  // Rushing straight across row 3 reaches the crossing the same tick as the trolley.
+  ok('5-3 naive rush collides (loses)', outcomeOf('5-3', [
+    { x: 1, y: 3, edges: ['W', 'E'] },
+    { x: 2, y: 3, edges: ['W', 'E'] },
+    { x: 5, y: 3, edges: ['W', 'E'] },
+  ]) === 'lost');
+  // Driving straight east couples wagon 3 (the leftmost) first — out of order.
+  ok('5-4 straight-east loses (order)', outcomeOf('5-4', [
+    { x: 1, y: 1, edges: ['W', 'E'] },
+    { x: 2, y: 1, edges: ['W', 'E'] },
+    { x: 3, y: 1, edges: ['W', 'E'] },
+  ]) === 'lost');
+  // Rushing the crossing meets the trolley head-on.
+  ok('5-5 naive rush collides (loses)', outcomeOf('5-5', [
+    { x: 1, y: 3, edges: ['W', 'E'] },
+    { x: 2, y: 3, edges: ['W', 'E'] },
+    { x: 6, y: 3, edges: ['W', 'E'] },
+    { x: 7, y: 3, edges: ['W', 'E'] },
+  ]) === 'lost');
+}
+
+/* ----------------------------- level store: new shipped worlds reach returning players ----------------------------- */
+{
+  const mkW = (id: number): World => ({ id, name: 'World ' + id, blurb: '' });
+  const mkL = (id: string, world: number): Level => ({
+    id, world, name: id, grid: { cols: 5, rows: 3 }, trackBudget: 4,
+    locomotive: { x: 0, y: 1, heading: 'E' }, fixedTiles: [{ x: 4, y: 1, type: 'exit', heading: 'W' }],
+    objectives: { couple: 'all-in-order', passengers: 0 },
+  });
+  // A cache written before World 5 existed; the shipped defaults now include it.
+  const loaded: Bundle = { worlds: [mkW(1), mkW(2), mkW(3), mkW(4)], levels: [mkL('4-3', 4)] };
+  const defaults: Bundle = { worlds: [mkW(1), mkW(2), mkW(3), mkW(4), mkW(5)], levels: [mkL('4-3', 4), mkL('5-1', 5), mkL('5-2', 5), mkL('5-3', 5)] };
+  const { bundle, added } = mergeMissingDefaults(loaded, defaults);
+  eq('store merge: adds World 5 to a returning player', bundle.worlds.map((w) => w.id), [1, 2, 3, 4, 5]);
+  eq('store merge: adds the 3 new levels', bundle.levels.map((l) => l.id), ['4-3', '5-1', '5-2', '5-3']);
+  eq('store merge: added count', added, 4);
+  // Player edits to an existing cached level are preserved (not clobbered by defaults).
+  const editCache: Bundle = { worlds: [mkW(1)], levels: [{ ...mkL('1-1', 1), name: 'PLAYER EDIT' }] };
+  const m2 = mergeMissingDefaults(editCache, { worlds: [mkW(1)], levels: [mkL('1-1', 1)] });
+  eq('store merge: keeps player edits to existing levels', m2.bundle.levels[0].name, 'PLAYER EDIT');
+  eq('store merge: adds nothing when all ids present', m2.added, 0);
 }
 
 /* ----------------------------- report ----------------------------- */
