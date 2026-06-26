@@ -12,7 +12,10 @@ import { Level } from './level.js';
 import { World } from './levelData.js';
 import { validateLevel } from './levelLoader.js';
 
-const KEY = 'sidetrack.levels.v1';
+// Bump this when the shipped library changes in a way that must reach EVERY
+// player (incl. ones with a cached library) — the old key is ignored, so the new
+// levels.json re-seeds. (Progress + economy live under their own keys, untouched.)
+const KEY = 'sidetrack.levels.v2';
 
 export interface Bundle {
   worlds: World[];
