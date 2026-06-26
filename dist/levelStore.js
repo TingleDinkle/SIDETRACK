@@ -8,7 +8,10 @@
  * to / imported from the same JSON shape the game ships in `levels.json`.
  */
 import { validateLevel } from './levelLoader.js';
-const KEY = 'sidetrack.levels.v1';
+// Bump this when the shipped library changes in a way that must reach EVERY
+// player (incl. ones with a cached library) — the old key is ignored, so the new
+// levels.json re-seeds. (Progress + economy live under their own keys, untouched.)
+const KEY = 'sidetrack.levels.v2';
 const clone = (v) => JSON.parse(JSON.stringify(v));
 /**
  * Reconcile a cached library with the shipped defaults: add any shipped worlds or
