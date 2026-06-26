@@ -1358,8 +1358,9 @@ export class Renderer {
     const { left, top, size } = this.cellRect(c.x, c.y);
     const cx = left + size / 2;
     const cy = top + size / 2;
+    // The open edge: a tunnel has exactly one mouth; fall back to the emerge dir.
+    const mouth = (edgeList(c.mask)[0] ?? tunnelExitDir(grid, c)) ?? 'W';
     if (this.assets && this.assets.has('tile_tunnel')) {
-      const mouth = (edgeList(c.mask)[0] ?? tunnelExitDir(grid, c)) ?? 'W';
       this.contactShadow(cx, cy, size);
       ctx.save();
       ctx.translate(cx, cy);
@@ -1371,18 +1372,43 @@ export class Renderer {
       }
       this.assets.draw(ctx, 'tile_tunnel', 0, 0, size * 0.98, size * 0.98);
       ctx.restore();
-      return;
+    } else {
+      // Procedural fallback: a rounded portal with a dark mouth.
+      ctx.save();
+      ctx.fillStyle = PAL.rock;
+      this.roundRect(left + size * 0.12, top + size * 0.12, size * 0.76, size * 0.76, size * 0.3);
+      ctx.fill();
+      ctx.fillStyle = PAL.inkDark;
+      ctx.beginPath();
+      ctx.arc(left + size / 2, top + size * 0.62, size * 0.22, Math.PI, Math.PI * 2);
+      ctx.rect(left + size / 2 - size * 0.22, top + size * 0.62, size * 0.44, size * 0.26);
+      ctx.fill();
+      ctx.restore();
     }
-    // Procedural fallback: a rounded portal with a dark mouth.
+    // The baked art doesn't read as directional, so spell the mouth out: a bright
+    // chevron at the open edge pointing the way the train goes in and comes out.
+    this.drawTunnelMouthCue(cx, cy, size, mouth);
+  }
+
+  /** A glowing chevron at a tunnel's open edge, pointing outward along its mouth. */
+  private drawTunnelMouthCue(cx: number, cy: number, size: number, mouth: Heading): void {
+    const ctx = this.ctx;
     ctx.save();
-    ctx.fillStyle = PAL.rock;
-    this.roundRect(left + size * 0.12, top + size * 0.12, size * 0.76, size * 0.76, size * 0.3);
-    ctx.fill();
-    ctx.fillStyle = PAL.inkDark;
+    ctx.translate(cx, cy);
+    ctx.rotate(this.headingAngle(mouth)); // +x now points out through the mouth
+    ctx.translate(size * 0.3, 0);
+    const a = size * 0.13;
+    ctx.strokeStyle = 'rgba(255,232,150,0.95)';
+    ctx.lineWidth = Math.max(2, size * 0.075);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = size * 0.06;
     ctx.beginPath();
-    ctx.arc(left + size / 2, top + size * 0.62, size * 0.22, Math.PI, Math.PI * 2);
-    ctx.rect(left + size / 2 - size * 0.22, top + size * 0.62, size * 0.44, size * 0.26);
-    ctx.fill();
+    ctx.moveTo(-a, -a);
+    ctx.lineTo(a, 0);
+    ctx.lineTo(-a, a);
+    ctx.stroke();
     ctx.restore();
   }
 
